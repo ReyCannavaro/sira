@@ -2,187 +2,124 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { cn } from "@/lib/utils/cn";
+import {
+  User, Mail, Lock, Eye, EyeOff,
+  ArrowRight, Loader2, AlertCircle
+} from "lucide-react";
 
 type Mode = "login" | "register";
+interface FormState { username: string; email: string; password: string; confirm: string; }
 
-interface FormState {
-  username: string;
-  email: string;
-  password: string;
-  confirm: string;
-}
-
-function NeuralBackground() {
+function Background() {
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      <svg className="absolute inset-0 w-full h-full opacity-[0.07]">
+    <div className="fixed inset-0 pointer-events-none overflow-hidden">
+      <div className="absolute inset-0" style={{
+        background: "radial-gradient(ellipse 80% 60% at 20% 10%, rgba(34,211,238,0.06) 0%, transparent 60%), radial-gradient(ellipse 70% 60% at 80% 90%, rgba(167,139,250,0.05) 0%, transparent 60%), #060C18"
+      }} />
+
+      <svg className="absolute inset-0 w-full h-full" style={{ opacity: 0.035 }}>
         <defs>
-          <pattern
-            id="login-grid"
-            width="50"
-            height="50"
-            patternUnits="userSpaceOnUse"
-          >
-            <path
-              d="M 50 0 L 0 0 0 50"
-              fill="none"
-              stroke="#334155"
-              strokeWidth="1"
-            />
+          <pattern id="g" width="52" height="52" patternUnits="userSpaceOnUse">
+            <path d="M 52 0 L 0 0 0 52" fill="none" stroke="#94A3B8" strokeWidth="0.6" />
           </pattern>
         </defs>
-        <rect width="100%" height="100%" fill="url(#login-grid)" />
+        <rect width="100%" height="100%" fill="url(#g)" />
       </svg>
 
-      <div
-        className="absolute rounded-full pointer-events-none"
-        style={{
-          top: "15%",
-          left: "10%",
-          width: 500,
-          height: 500,
-          background:
-            "radial-gradient(circle, rgba(34,211,238,0.07) 0%, transparent 70%)",
-        }}
-      />
-      <div
-        className="absolute rounded-full pointer-events-none"
-        style={{
-          bottom: "10%",
-          right: "8%",
-          width: 600,
-          height: 600,
-          background:
-            "radial-gradient(circle, rgba(167,139,250,0.06) 0%, transparent 70%)",
-        }}
-      />
+      <div className="absolute rounded-full" style={{ width: 640, height: 640, top: "-15%", left: "-12%", background: "radial-gradient(circle, rgba(34,211,238,0.05) 0%, transparent 65%)", filter: "blur(40px)" }} />
+      <div className="absolute rounded-full" style={{ width: 720, height: 720, bottom: "-20%", right: "-15%", background: "radial-gradient(circle, rgba(167,139,250,0.04) 0%, transparent 65%)", filter: "blur(40px)" }} />
 
-      {[...Array(20)].map((_, i) => (
-        <div
-          key={i}
-          className="absolute rounded-full animate-pulse-glow"
-          style={{
-            left: `${10 + ((i * 37) % 80)}%`,
-            top: `${5 + ((i * 53) % 90)}%`,
-            width: i % 3 === 0 ? 3 : 2,
-            height: i % 3 === 0 ? 3 : 2,
-            background: i % 2 === 0 ? "#22D3EE" : "#A78BFA",
-            opacity: 0.2 + (i % 4) * 0.1,
-            animationDelay: `${i * 0.3}s`,
-            animationDuration: `${2 + (i % 3)}s`,
-          }}
-        />
+      {[
+        { x: "14%", y: "22%", s: 2.5, c: "#22D3EE", delay: "0s",    dur: "4s"  },
+        { x: "88%", y: "15%", s: 2,   c: "#A78BFA", delay: "1.2s",  dur: "3.5s"},
+        { x: "22%", y: "78%", s: 2,   c: "#22D3EE", delay: "2.1s",  dur: "4.5s"},
+        { x: "75%", y: "72%", s: 2.5, c: "#A78BFA", delay: "0.6s",  dur: "3.8s"},
+        { x: "94%", y: "42%", s: 2,   c: "#22D3EE", delay: "1.8s",  dur: "4.2s"},
+        { x: "6%",  y: "55%", s: 2,   c: "#A78BFA", delay: "0.9s",  dur: "3.6s"},
+        { x: "48%", y: "92%", s: 2,   c: "#22D3EE", delay: "1.5s",  dur: "4s"  },
+        { x: "35%", y: "8%",  s: 2,   c: "#A78BFA", delay: "2.4s",  dur: "3.4s"},
+        { x: "62%", y: "30%", s: 1.5, c: "#22D3EE", delay: "0.3s",  dur: "5s"  },
+      ].map((d, i) => (
+        <div key={i} className="absolute rounded-full" style={{
+          left: d.x, top: d.y, width: d.s, height: d.s,
+          background: d.c, opacity: 0.35,
+          animation: `pulse-glow ${d.dur} ease-in-out infinite`,
+          animationDelay: d.delay,
+        }} />
       ))}
     </div>
   );
 }
 
-interface InputFieldProps {
-  label: string;
-  type: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  icon: string;
-  rightAction?: React.ReactNode;
-  onKeyDown?: (e: React.KeyboardEvent) => void;
-  error?: boolean;
-}
-
 function InputField({
-  label,
-  type,
-  value,
-  onChange,
-  placeholder,
-  icon,
-  rightAction,
-  onKeyDown,
-  error,
-}: InputFieldProps) {
+  label, type, value, onChange, placeholder, Icon: IconComp,
+  rightSlot, onKeyDown, hasError,
+}: {
+  label: string; type: string; value: string;
+  onChange: (v: string) => void; placeholder: string;
+  Icon: React.ElementType; rightSlot?: React.ReactNode;
+  onKeyDown?: (e: React.KeyboardEvent) => void; hasError?: boolean;
+}) {
   const [focused, setFocused] = useState(false);
 
   return (
-    <div>
-      <label
-        className="block mb-1.5 text-[11px] tracking-widest font-medium"
-        style={{
-          fontFamily: "var(--font-geist-mono)",
-          color: error ? "#F87171" : focused ? "#22D3EE" : "#475569",
-          transition: "color 0.2s",
-        }}
-      >
+    <div className="flex flex-col gap-1.5">
+      <label style={{
+        fontSize: 10, fontFamily: "var(--font-geist-mono)",
+        letterSpacing: "0.13em", fontWeight: 600,
+        color: hasError ? "#F87171" : focused ? "#22D3EE" : "#3D4F6A",
+        transition: "color 0.2s",
+      }}>
         {label}
       </label>
-      <div
-        className="flex items-center rounded-xl overflow-hidden transition-all duration-200"
-        style={{
-          background: "#070F1A",
-          border: `1px solid ${
-            error ? "#F87171" : focused ? "#22D3EE" : "#334155"
-          }`,
-          boxShadow: focused
-            ? error
-              ? "0 0 0 3px rgba(248,113,113,0.1)"
-              : "0 0 0 3px rgba(34,211,238,0.1)"
-            : "none",
-        }}
-      >
-        <span
-          className="px-3 text-base shrink-0 border-r transition-colors duration-200"
-          style={{
-            borderColor: focused ? "#22D3EE33" : "#1E293B",
-            paddingTop: 12,
-            paddingBottom: 12,
-          }}
-        >
-          {icon}
-        </span>
+      <div style={{
+        display: "flex", alignItems: "center",
+        background: "rgba(2,6,16,0.6)",
+        border: `1px solid ${hasError ? "rgba(248,113,113,0.4)" : focused ? "rgba(34,211,238,0.4)" : "rgba(30,41,59,0.8)"}`,
+        borderRadius: 10,
+        boxShadow: focused
+          ? hasError ? "0 0 0 3px rgba(248,113,113,0.06)" : "0 0 0 3px rgba(34,211,238,0.05)"
+          : "none",
+        transition: "border-color 0.2s, box-shadow 0.2s",
+      }}>
+        <div style={{
+          width: 44, display: "flex", alignItems: "center", justifyContent: "center",
+          borderRight: `1px solid ${focused ? "rgba(34,211,238,0.12)" : "rgba(30,41,59,0.6)"}`,
+          transition: "border-color 0.2s",
+        }}>
+          <IconComp size={14} style={{ color: focused ? "#22D3EE" : "#3D4F6A", transition: "color 0.2s" }} />
+        </div>
         <input
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          type={type} value={value}
+          onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onKeyDown={onKeyDown}
-          className="flex-1 bg-transparent border-none outline-none px-4 py-3 text-sm text-ghost-white placeholder-text-muted"
-          style={{ fontFamily: "var(--font-inter)" }}
+          style={{
+            flex: 1, background: "transparent", border: "none", outline: "none",
+            padding: "11px 14px", fontSize: 13,
+            color: "#E2E8F0", fontFamily: "var(--font-inter)",
+          }}
         />
-        {rightAction}
+        {rightSlot && <div style={{ paddingRight: 6 }}>{rightSlot}</div>}
       </div>
     </div>
   );
 }
 
-function SocialButton({
-  icon,
-  label,
-  onClick,
-}: {
-  icon: string;
-  label: string;
-  onClick?: () => void;
-}) {
-  const [hovered, setHovered] = useState(false);
-
+function IconBtn({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm transition-all duration-200"
-      style={{
-        background: "#070F1A",
-        border: `1px solid ${hovered ? "rgba(34,211,238,0.4)" : "#334155"}`,
-        color: hovered ? "#F8FAFC" : "#94A3B8",
-        fontFamily: "var(--font-inter)",
-        fontWeight: 500,
-      }}
+    <button onClick={onClick} style={{
+      display: "flex", alignItems: "center", justifyContent: "center",
+      width: 32, height: 32, borderRadius: 8,
+      background: "none", border: "none", cursor: "pointer",
+      color: "#3D4F6A", transition: "color 0.2s",
+    }}
+      onMouseEnter={e => (e.currentTarget.style.color = "#64748B")}
+      onMouseLeave={e => (e.currentTarget.style.color = "#3D4F6A")}
     >
-      <span>{icon}</span>
-      <span>{label}</span>
+      {children}
     </button>
   );
 }
@@ -190,345 +127,302 @@ function SocialButton({
 export default function LoginPage() {
   const router = useRouter();
 
-  const [mode, setMode] = useState<Mode>("login");
-  const [form, setForm] = useState<FormState>({
-    username: "",
-    email: "",
-    password: "",
-    confirm: "",
-  });
+  const [mode,     setMode]     = useState<Mode>("login");
+  const [form,     setForm]     = useState<FormState>({ username: "", email: "", password: "", confirm: "" });
   const [showPass, setShowPass] = useState(false);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [error,    setError]    = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [ready,    setReady]    = useState(false);
 
-  useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 50);
-    return () => clearTimeout(t);
-  }, []);
+  useEffect(() => { const t = setTimeout(() => setReady(true), 80); return () => clearTimeout(t); }, []);
 
-  const setField = (field: keyof FormState) => (value: string) =>
-    setForm((prev) => ({ ...prev, [field]: value }));
+  const set = (f: keyof FormState) => (v: string) => setForm(p => ({ ...p, [f]: v }));
 
   const validate = (): string | null => {
-    if (!form.email.trim()) return "Email tidak boleh kosong";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-      return "Format email tidak valid";
-    if (!form.password.trim()) return "Password tidak boleh kosong";
-
+    if (!form.email.trim())    return "Email tidak boleh kosong";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return "Format email tidak valid";
+    if (!form.password)        return "Password tidak boleh kosong";
     if (mode === "register") {
-      if (!form.username.trim()) return "Username tidak boleh kosong";
-      if (form.username.length < 3) return "Username minimal 3 karakter";
-      if (!/^[a-z0-9_]{3,30}$/.test(form.username))
-        return "Username hanya boleh huruf kecil, angka, dan underscore";
-      if (form.password.length < 8) return "Password minimal 8 karakter";
-      if (form.password !== form.confirm) return "Password tidak cocok";
+      if (!form.username.trim())              return "Username tidak boleh kosong";
+      if (form.username.length < 3)           return "Username minimal 3 karakter";
+      if (!/^[a-z0-9_]{3,30}$/.test(form.username)) return "Username: huruf kecil, angka, underscore";
+      if (form.password.length < 8)           return "Password minimal 8 karakter";
+      if (form.password !== form.confirm)     return "Konfirmasi password tidak cocok";
     }
     return null;
   };
 
   const handleSubmit = async () => {
-    const validationErr = validate();
-    if (validationErr) return setError(validationErr);
-    setError("");
-    setLoading(true);
-
+    const err = validate();
+    if (err) return setError(err);
+    setError(""); setLoading(true);
     try {
-      const endpoint =
-        mode === "login" ? "/api/auth/login" : "/api/auth/register";
-
-      const body =
-        mode === "login"
+      const res  = await fetch(mode === "login" ? "/api/auth/login" : "/api/auth/register", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mode === "login"
           ? { email: form.email, password: form.password }
-          : {
-              email: form.email,
-              password: form.password,
-              username: form.username,
-              display_name: form.username,
-            };
-
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+          : { email: form.email, password: form.password, username: form.username, display_name: form.username }
+        ),
       });
-
       const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        setError(data.error ?? "Terjadi kesalahan. Coba lagi.");
-        return;
-      }
-
-      if (mode === "register") {
-        router.push("/onboarding");
-      } else {
-        const hasHeroClass = data.data?.user?.hero_class;
-        router.push(hasHeroClass ? "/adventure" : "/onboarding");
-      }
-    } catch {
-      setError("Koneksi gagal. Periksa internet kamu.");
-    } finally {
-      setLoading(false);
-    }
+      if (!res.ok || !data.success) { setError(data.error ?? "Terjadi kesalahan. Coba lagi."); return; }
+      router.push(mode === "register" ? "/onboarding" : data.data?.user?.hero_class ? "/adventure" : "/onboarding");
+    } catch { setError("Koneksi gagal. Periksa internet kamu."); }
+    finally   { setLoading(false); }
   };
 
-  const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleSubmit();
-  };
+  const handleKey = (e: React.KeyboardEvent) => { if (e.key === "Enter") handleSubmit(); };
 
-  const switchMode = (newMode: Mode) => {
-    setMode(newMode);
-    setError("");
-    setForm({ username: "", email: "", password: "", confirm: "" });
-  };
-
-  const handleGoogle = () => {
-    window.location.href = "/api/auth/oauth/google";
-  };
+  const switchMode = (m: Mode) => { setMode(m); setError(""); setForm({ username: "", email: "", password: "", confirm: "" }); };
 
   return (
-    <div
-      className="relative min-h-screen flex items-center justify-center"
-      style={{ background: "#0F172A" }}
-    >
-      <NeuralBackground />
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+      <Background />
 
-      <div
-        className="relative z-10 w-full mx-4 transition-all duration-500"
-        style={{
-          maxWidth: 440,
-          opacity: mounted ? 1 : 0,
-          transform: mounted ? "translateY(0) scale(1)" : "translateY(20px) scale(0.97)",
-        }}
-      >
-        <div
-          className="rounded-2xl p-10"
-          style={{
-            background: "rgba(30,41,59,0.8)",
-            backdropFilter: "blur(24px)",
-            border: "1px solid rgba(255,255,255,0.07)",
-            boxShadow:
-              "0 0 80px rgba(34,211,238,0.05), 0 32px 64px rgba(0,0,0,0.5)",
-          }}
-        >
-          <div className="text-center mb-8">
-            <div
-              className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4 text-2xl font-bold text-white"
-              style={{
-                background: "linear-gradient(135deg, #22D3EE, #A78BFA)",
-                boxShadow: "0 0 32px rgba(34,211,238,0.35)",
+      <div style={{
+        padding: "30px 0",
+        position: "relative", zIndex: 10,
+        width: "100%", maxWidth: 400,
+        margin: "0 16px",
+        opacity: ready ? 1 : 0,
+        transform: ready ? "translateY(0)" : "translateY(20px)",
+        transition: "opacity 0.5s ease, transform 0.5s ease",
+      }}>
+        <div style={{
+          position: "absolute", inset: -1, borderRadius: 20,
+          background: "linear-gradient(135deg, rgba(34,211,238,0.08), rgba(167,139,250,0.06))",
+          filter: "blur(16px)", transform: "scale(1.04)",
+        }} />
+
+        <div style={{
+          position: "relative",
+          background: "rgba(8,14,28,0.92)",
+          backdropFilter: "blur(32px)",
+          borderRadius: 18,
+          border: "1px solid rgba(255,255,255,0.06)",
+          boxShadow: "0 40px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)",
+          overflow: "hidden",
+        }}>
+          <div style={{
+            height: 1,
+            background: "linear-gradient(90deg, transparent, rgba(34,211,238,0.4), rgba(167,139,250,0.35), transparent)",
+          }} />
+
+          <div style={{ padding: "36px 36px 32px" }}>
+
+            <div style={{ textAlign: "center", marginBottom: 28 }}>
+              <div style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 48, height: 48, borderRadius: 13,
+                background: "linear-gradient(135deg, #22D3EE, #818CF8)",
+                boxShadow: "0 8px 24px rgba(34,211,238,0.2)",
+                marginBottom: 14,
+              }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#06080F" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5" />
+                  <line x1="13" y1="19" x2="19" y2="13" />
+                  <line x1="16" y1="16" x2="20" y2="20" />
+                  <line x1="19" y1="21" x2="21" y2="19" />
+                </svg>
+              </div>
+
+              <div style={{
+                fontSize: 20, fontWeight: 800,
+                letterSpacing: "0.18em",
+                color: "#F1F5F9",
                 fontFamily: "var(--font-geist-mono)",
-              }}
-            >
-              S
+                marginBottom: 5,
+              }}>
+                SIRA
+              </div>
+              <div style={{ fontSize: 11, color: "#3D4F6A", letterSpacing: "0.04em" }}>
+                Socratic Interactive RPG Academy
+              </div>
             </div>
-            <h1
-              className="text-xl font-bold tracking-widest text-ghost-white mb-1.5"
-              style={{ fontFamily: "var(--font-geist-mono)" }}
-            >
-              SIRA
-            </h1>
-            <p className="text-xs text-text-muted tracking-wide">
-              Socratic Interactive RPG Academy
+
+            <div style={{
+              display: "flex", gap: 4,
+              padding: 4, borderRadius: 12,
+              background: "rgba(2,6,16,0.5)",
+              border: "1px solid rgba(30,41,59,0.7)",
+              marginBottom: 24,
+            }}>
+              {(["login", "register"] as Mode[]).map(m => (
+                <button key={m} onClick={() => switchMode(m)} style={{
+                  flex: 1, padding: "8px 0",
+                  borderRadius: 9,
+                  fontSize: 11, fontWeight: 700,
+                  letterSpacing: "0.1em",
+                  fontFamily: "var(--font-geist-mono)",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                  background: mode === m
+                    ? "linear-gradient(135deg, rgba(34,211,238,0.1), rgba(129,140,248,0.08))"
+                    : "transparent",
+                  color: mode === m ? "#22D3EE" : "#3D4F6A",
+                  border: mode === m ? "1px solid rgba(34,211,238,0.15)" : "1px solid transparent",
+                }}>
+                  {m === "login" ? "MASUK" : "DAFTAR"}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {mode === "register" && (
+                <InputField label="USERNAME" type="text"
+                  value={form.username} onChange={set("username")}
+                  placeholder="username_kamu" Icon={User} onKeyDown={handleKey}
+                />
+              )}
+
+              <InputField label="EMAIL" type="email"
+                value={form.email} onChange={set("email")}
+                placeholder="kamu@sira.app" Icon={Mail} onKeyDown={handleKey}
+                hasError={!!error && error.toLowerCase().includes("email")}
+              />
+
+              <InputField label="PASSWORD" type={showPass ? "text" : "password"}
+                value={form.password} onChange={set("password")}
+                placeholder={mode === "register" ? "Minimal 8 karakter" : "Password"}
+                Icon={Lock} onKeyDown={handleKey}
+                rightSlot={
+                  <IconBtn onClick={() => setShowPass(v => !v)}>
+                    {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </IconBtn>
+                }
+              />
+
+              {mode === "register" && (
+                <InputField label="KONFIRMASI PASSWORD" type={showPass ? "text" : "password"}
+                  value={form.confirm} onChange={set("confirm")}
+                  placeholder="Ulangi password" Icon={Lock} onKeyDown={handleKey}
+                  hasError={!!form.confirm && form.password !== form.confirm}
+                />
+              )}
+
+              {mode === "login" && (
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -4 }}>
+                  <button style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    fontSize: 11, color: "#3D4F6A",
+                    transition: "color 0.2s",
+                  }}
+                    onMouseEnter={e => (e.currentTarget.style.color = "#22D3EE")}
+                    onMouseLeave={e => (e.currentTarget.style.color = "#3D4F6A")}
+                  >
+                    Lupa password?
+                  </button>
+                </div>
+              )}
+
+              {error && (
+                <div style={{
+                  display: "flex", alignItems: "flex-start", gap: 10,
+                  padding: "10px 14px", borderRadius: 10,
+                  background: "rgba(248,113,113,0.05)",
+                  border: "1px solid rgba(248,113,113,0.18)",
+                }}>
+                  <AlertCircle size={14} style={{ color: "#F87171", marginTop: 1, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, color: "#F87171", lineHeight: 1.5 }}>{error}</span>
+                </div>
+              )}
+
+              <button onClick={handleSubmit} disabled={loading} style={{
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                width: "100%", padding: "12px 0",
+                borderRadius: 11,
+                fontSize: 13, fontWeight: 700,
+                letterSpacing: "0.06em",
+                fontFamily: "var(--font-geist-mono)",
+                border: "none", cursor: loading ? "not-allowed" : "pointer",
+                background: loading
+                  ? "rgba(20,30,48,0.8)"
+                  : "linear-gradient(135deg, #22D3EE 0%, #818CF8 100%)",
+                color: loading ? "#3D4F6A" : "#06080F",
+                boxShadow: loading ? "none" : "0 4px 20px rgba(34,211,238,0.18)",
+                transition: "all 0.25s",
+                marginTop: 4,
+              }}>
+                {loading
+                  ? <><Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> Memproses...</>
+                  : <>{mode === "login" ? "Mulai Petualangan" : "Buat Akun"} <ArrowRight size={15} strokeWidth={2.5} /></>
+                }
+              </button>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "24px 0 20px" }}>
+              <div style={{ flex: 1, height: 1, background: "rgba(30,41,59,0.7)" }} />
+              <span style={{ fontSize: 10, color: "#1E2D42", letterSpacing: "0.12em", fontFamily: "var(--font-geist-mono)" }}>ATAU</span>
+              <div style={{ flex: 1, height: 1, background: "rgba(30,41,59,0.7)" }} />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {[
+                {
+                  label: "Google",
+                  icon: <svg width="14" height="14" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>,
+                  onClick: () => { window.location.href = "/api/auth/oauth/google"; },
+                },
+                {
+                  label: "GitHub",
+                  icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="#94A3B8"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>,
+                  onClick: () => {},
+                },
+              ].map(({ label, icon, onClick }) => (
+                <button key={label} onClick={onClick} style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  padding: "10px 0", borderRadius: 10,
+                  fontSize: 12, fontWeight: 500,
+                  background: "rgba(2,6,16,0.5)",
+                  border: "1px solid rgba(30,41,59,0.7)",
+                  color: "#4A5E7A", cursor: "pointer",
+                  fontFamily: "var(--font-inter)",
+                  transition: "all 0.2s",
+                }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(34,211,238,0.2)";
+                    (e.currentTarget as HTMLElement).style.color = "#94A3B8";
+                    (e.currentTarget as HTMLElement).style.background = "rgba(34,211,238,0.03)";
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(30,41,59,0.7)";
+                    (e.currentTarget as HTMLElement).style.color = "#4A5E7A";
+                    (e.currentTarget as HTMLElement).style.background = "rgba(2,6,16,0.5)";
+                  }}
+                >
+                  {icon}
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <p style={{ textAlign: "center", marginTop: 22, fontSize: 12, color: "#2A3A50" }}>
+              {mode === "login" ? "Belum punya akun? " : "Sudah punya akun? "}
+              <button onClick={() => switchMode(mode === "login" ? "register" : "login")} style={{
+                background: "none", border: "none", cursor: "pointer",
+                fontSize: 12, fontWeight: 600, color: "#22D3EE",
+                transition: "color 0.2s",
+              }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#67E8F9")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#22D3EE")}
+              >
+                {mode === "login" ? "Daftar sekarang" : "Masuk"}
+              </button>
             </p>
           </div>
-
-          <div
-            className="flex rounded-xl p-1 mb-7"
-            style={{
-              background: "#070F1A",
-              border: "1px solid #1E293B",
-            }}
-          >
-            {(["login", "register"] as Mode[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => switchMode(m)}
-                className={cn(
-                  "flex-1 py-2 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200",
-                  mode === m
-                    ? "text-neon-cyan"
-                    : "text-text-muted hover:text-text-secondary"
-                )}
-                style={{
-                  fontFamily: "var(--font-geist-mono)",
-                  background:
-                    mode === m
-                      ? "linear-gradient(135deg, rgba(34,211,238,0.12), rgba(167,139,250,0.12))"
-                      : "transparent",
-                  borderBottom:
-                    mode === m ? "2px solid #22D3EE" : "2px solid transparent",
-                }}
-              >
-                {m === "login" ? "MASUK" : "DAFTAR"}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex flex-col gap-4">
-            {mode === "register" && (
-              <InputField
-                label="USERNAME"
-                type="text"
-                value={form.username}
-                onChange={setField("username")}
-                placeholder="hero_name_123"
-                icon="👤"
-                onKeyDown={handleKey}
-              />
-            )}
-
-            <InputField
-              label="EMAIL"
-              type="email"
-              value={form.email}
-              onChange={setField("email")}
-              placeholder="hero@sira.app"
-              icon="✉️"
-              onKeyDown={handleKey}
-              error={!!error && error.includes("email")}
-            />
-
-            <InputField
-              label="PASSWORD"
-              type={showPass ? "text" : "password"}
-              value={form.password}
-              onChange={setField("password")}
-              placeholder="••••••••"
-              icon="🔑"
-              onKeyDown={handleKey}
-              rightAction={
-                <button
-                  onClick={() => setShowPass(!showPass)}
-                  className="px-3 text-text-muted hover:text-text-secondary transition-colors"
-                  style={{ background: "none", border: "none", cursor: "pointer" }}
-                >
-                  {showPass ? "🙈" : "👁️"}
-                </button>
-              }
-            />
-
-            {mode === "register" && (
-              <InputField
-                label="KONFIRMASI PASSWORD"
-                type={showPass ? "text" : "password"}
-                value={form.confirm}
-                onChange={setField("confirm")}
-                placeholder="••••••••"
-                icon="🔒"
-                onKeyDown={handleKey}
-                error={!!form.confirm && form.password !== form.confirm}
-              />
-            )}
-
-            {mode === "login" && (
-              <div className="flex justify-end -mt-1">
-                <button
-                  className="text-xs text-text-muted hover:text-neon-cyan transition-colors"
-                  style={{ background: "none", border: "none", cursor: "pointer" }}
-                >
-                  Lupa password?
-                </button>
-              </div>
-            )}
-
-            {error && (
-              <div
-                className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm text-neon-rose"
-                style={{
-                  background: "rgba(248,113,113,0.08)",
-                  border: "1px solid rgba(248,113,113,0.25)",
-                  animation: "scale-in 0.2s ease",
-                }}
-              >
-                <span>⚠️</span>
-                <span>{error}</span>
-              </div>
-            )}
-
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="relative w-full py-3.5 rounded-xl font-bold text-sm tracking-wider transition-all duration-300 mt-1 overflow-hidden"
-              style={{
-                fontFamily: "var(--font-geist-mono)",
-                background: loading
-                  ? "#1E293B"
-                  : "linear-gradient(135deg, #22D3EE, #A78BFA)",
-                color: loading ? "#475569" : "#0F172A",
-                border: "none",
-                cursor: loading ? "not-allowed" : "pointer",
-                boxShadow: loading
-                  ? "none"
-                  : "0 0 24px rgba(34,211,238,0.25)",
-              }}
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span
-                    className="inline-block"
-                    style={{ animation: "spin 1s linear infinite" }}
-                  >
-                    ⟳
-                  </span>
-                  {mode === "login"
-                    ? "Memasuki dunia..."
-                    : "Membuat akun..."}
-                </span>
-              ) : (
-                <span>
-                  {mode === "login" ? "⚔️ Mulai Petualangan" : "🚀 Buat Akun"}
-                </span>
-              )}
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 my-6">
-            <div className="flex-1 h-px bg-deep-slate" />
-            <span className="text-xs text-text-muted">atau lanjutkan dengan</span>
-            <div className="flex-1 h-px bg-deep-slate" />
-          </div>
-
-          <div className="flex gap-3">
-            <SocialButton icon="🌐" label="Google" onClick={handleGoogle} />
-            <SocialButton icon="🐙" label="GitHub" />
-          </div>
-
-          <p className="text-center mt-6 text-xs text-text-muted">
-            {mode === "login" ? "Belum punya akun? " : "Sudah punya akun? "}
-            <button
-              onClick={() =>
-                switchMode(mode === "login" ? "register" : "login")
-              }
-              className="text-neon-cyan font-semibold hover:underline transition-all"
-              style={{ background: "none", border: "none", cursor: "pointer" }}
-            >
-              {mode === "login" ? "Daftar sekarang →" : "Masuk →"}
-            </button>
-          </p>
         </div>
 
-        <p
-          className="text-center mt-6 text-[10px] tracking-widest"
-          style={{
-            color: "#1E293B",
-            fontFamily: "var(--font-geist-mono)",
-          }}
-        >
-          SIRA v2.0 · CYBER-TECH MINIMALIST · THE NEURAL NETWORK
+        <p style={{
+          textAlign: "center", marginTop: 20,
+          fontSize: 9, letterSpacing: "0.22em",
+          color: "#111827", fontFamily: "var(--font-geist-mono)",
+        }}>
+          SIRA v2.0 · NEURAL NETWORK
         </p>
       </div>
 
       <style jsx>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
-        @keyframes scale-in {
-          from { transform: scale(0.95); opacity: 0; }
-          to   { transform: scale(1);    opacity: 1; }
-        }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
     </div>
   );
