@@ -113,8 +113,6 @@ const HEROES: HeroClass[] = [
   },
 ];
 
-// ─── PROLOGUE ─────────────────────────────────────────────────────────────────
-
 const LINES = [
   { text: "Di suatu masa...", sub: null },
   { text: "Digital Realm sedang dalam bahaya.", sub: null },
@@ -191,8 +189,6 @@ function Prologue({ onDone }: { onDone: () => void }) {
   );
 }
 
-// ─── PENTAGON RADAR CHART ─────────────────────────────────────────────────────
-
 function PentagonChart({ data, color }: { data: { label: string; value: number }[]; color: string }) {
   const size   = 110;
   const cx     = size / 2;
@@ -200,17 +196,12 @@ function PentagonChart({ data, color }: { data: { label: string; value: number }
   const radius = 42;
   const levels = 4;
   const n      = data.length;
-
-  // Sudut untuk tiap titik (mulai dari atas, searah jarum jam)
   const angle = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2;
-
-  // Koordinat titik di level tertentu
   const pt = (i: number, r: number) => ({
     x: cx + r * Math.cos(angle(i)),
     y: cy + r * Math.sin(angle(i)),
   });
 
-  // Grid levels (polygon background)
   const gridPolygons = Array.from({ length: levels }, (_, l) => {
     const r = (radius * (l + 1)) / levels;
     return Array.from({ length: n }, (_, i) => pt(i, r))
@@ -218,14 +209,12 @@ function PentagonChart({ data, color }: { data: { label: string; value: number }
       .join(" ");
   });
 
-  // Data polygon
   const dataPoints = data.map((d, i) => {
     const r = (d.value / 100) * radius;
     return pt(i, r);
   });
   const dataPolygon = dataPoints.map(p => `${p.x},${p.y}`).join(" ");
 
-  // Spoke lines
   const spokes = Array.from({ length: n }, (_, i) => {
     const outer = pt(i, radius);
     return { x1: cx, y1: cy, x2: outer.x, y2: outer.y };
@@ -233,7 +222,6 @@ function PentagonChart({ data, color }: { data: { label: string; value: number }
 
   return (
     <svg width={size} height={size} style={{ overflow: "visible" }}>
-      {/* Grid polygons */}
       {gridPolygons.map((pts, l) => (
         <polygon key={l} points={pts}
           fill="none"
@@ -242,14 +230,12 @@ function PentagonChart({ data, color }: { data: { label: string; value: number }
         />
       ))}
 
-      {/* Spokes */}
       {spokes.map((s, i) => (
         <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2}
           stroke={`${color}15`} strokeWidth="0.8"
         />
       ))}
 
-      {/* Data polygon fill */}
       <polygon points={dataPolygon}
         fill={`${color}15`}
         stroke={color}
@@ -258,7 +244,6 @@ function PentagonChart({ data, color }: { data: { label: string; value: number }
         style={{ filter: `drop-shadow(0 0 4px ${color}55)` }}
       />
 
-      {/* Data points */}
       {dataPoints.map((p, i) => (
         <circle key={i} cx={p.x} cy={p.y} r={2.5}
           fill={color}
@@ -266,7 +251,6 @@ function PentagonChart({ data, color }: { data: { label: string; value: number }
         />
       ))}
 
-      {/* Labels */}
       {data.map((d, i) => {
         const labelRadius = radius + 14;
         const p = pt(i, labelRadius);
@@ -283,8 +267,6 @@ function PentagonChart({ data, color }: { data: { label: string; value: number }
     </svg>
   );
 }
-
-// ─── DIFFICULTY DOTS ──────────────────────────────────────────────────────────
 
 function DifficultyRow({ label, level, max, color }: { label: string; level: number; max: number; color: string }) {
   return (
@@ -303,8 +285,6 @@ function DifficultyRow({ label, level, max, color }: { label: string; level: num
     </div>
   );
 }
-
-// ─── HERO CARD ──────────────────────────────────────────────────────────────────
 
 function HeroCard({ hero, selected, onSelect }: { hero: HeroClass; selected: boolean; onSelect: () => void }) {
   const [hovered, setHovered] = useState(false);
@@ -331,19 +311,16 @@ function HeroCard({ hero, selected, onSelect }: { hero: HeroClass; selected: boo
         height: "100%",
       }}
     >
-      {/* Selected check */}
       {selected && (
         <div style={{ position: "absolute", top: 14, right: 14, width: 22, height: 22, borderRadius: "50%", background: hero.regionColor, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Check size={12} color="#020810" strokeWidth={3} />
         </div>
       )}
 
-      {/* Top shimmer */}
       {selected && (
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, transparent, ${hero.regionColor}60, transparent)`, borderRadius: "16px 16px 0 0" }} />
       )}
 
-      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
         <div style={{ width: 44, height: 44, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: `${hero.regionColor}15`, border: `1px solid ${hero.regionColor}25`, flexShrink: 0 }}>
           <Icon size={20} color={hero.regionColor} strokeWidth={1.75} />
@@ -354,16 +331,12 @@ function HeroCard({ hero, selected, onSelect }: { hero: HeroClass; selected: boo
         </div>
       </div>
 
-      {/* Region badge */}
       <div style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 6, background: `${hero.regionColor}10`, border: `1px solid ${hero.regionColor}20`, marginBottom: 12, alignSelf: "flex-start" }}>
         <MapPin size={9} color={hero.regionColor} />
         <span style={{ fontSize: 10, color: hero.regionColor, fontFamily: "var(--font-geist-mono)", letterSpacing: "0.06em" }}>{hero.startRegion}</span>
       </div>
 
-      {/* Desc */}
       <p style={{ fontSize: 12, color: "#475569", lineHeight: 1.7, marginBottom: 16, flex: 1 }}>{hero.desc}</p>
-
-      {/* ── Skills — berwarna sesuai tema ── */}
       <div style={{ marginBottom: 18 }}>
         <div style={{ fontSize: 9, color: "#1E2D42", fontFamily: "var(--font-geist-mono)", letterSpacing: "0.14em", marginBottom: 8 }}>SKILL</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -381,16 +354,13 @@ function HeroCard({ hero, selected, onSelect }: { hero: HeroClass; selected: boo
         </div>
       </div>
 
-      {/* ── Pentagon Chart + Difficulty side by side ── */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginTop: "auto" }}>
 
-        {/* Pentagon */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, flexShrink: 0 }}>
           <div style={{ fontSize: 9, color: "#1E2D42", fontFamily: "var(--font-geist-mono)", letterSpacing: "0.12em", alignSelf: "flex-start" }}>RADAR</div>
           <PentagonChart data={hero.radar} color={hero.regionColor} />
         </div>
 
-        {/* Difficulty */}
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 9, color: "#1E2D42", fontFamily: "var(--font-geist-mono)", letterSpacing: "0.12em", marginBottom: 12 }}>KESULITAN</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -399,7 +369,6 @@ function HeroCard({ hero, selected, onSelect }: { hero: HeroClass; selected: boo
             ))}
           </div>
 
-          {/* Overall difficulty label */}
           <div style={{ marginTop: 14, padding: "6px 10px", borderRadius: 7, background: `${hero.regionColor}08`, border: `1px solid ${hero.regionColor}18`, display: "inline-flex", alignItems: "center", gap: 6 }}>
             <div style={{ width: 5, height: 5, borderRadius: "50%", background: hero.regionColor, boxShadow: `0 0 5px ${hero.regionColor}` }} />
             <span style={{ fontSize: 10, color: hero.regionColor, fontFamily: "var(--font-geist-mono)", letterSpacing: "0.06em" }}>
@@ -415,8 +384,6 @@ function HeroCard({ hero, selected, onSelect }: { hero: HeroClass; selected: boo
     </div>
   );
 }
-
-// ─── COMPARISON TABLE ──────────────────────────────────────────────────────────
 
 function ComparisonTable({ selected }: { selected: HeroClassId | null }) {
   return (
@@ -443,8 +410,6 @@ function ComparisonTable({ selected }: { selected: HeroClassId | null }) {
     </div>
   );
 }
-
-// ─── MAIN ──────────────────────────────────────────────────────────────────────
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -483,7 +448,6 @@ export default function OnboardingPage() {
 
       {!showPrologue && (
         <div style={{ minHeight: "100vh", background: "linear-gradient(160deg, #05090F 0%, #080E1C 50%, #060B17 100%)", position: "relative", overflow: "hidden" }}>
-          {/* Background */}
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
             <div style={{ position: "absolute", width: 800, height: 800, top: "-20%", left: "-10%", background: "radial-gradient(circle, rgba(34,211,238,0.03) 0%, transparent 65%)", filter: "blur(60px)" }} />
             <div style={{ position: "absolute", width: 700, height: 700, bottom: "-15%", right: "-10%", background: "radial-gradient(circle, rgba(167,139,250,0.03) 0%, transparent 65%)", filter: "blur(60px)" }} />
@@ -501,7 +465,6 @@ export default function OnboardingPage() {
             transform: mounted ? "none" : "translateY(16px)",
             transition: "opacity 0.5s ease, transform 0.5s ease",
           }}>
-            {/* Header */}
             <div style={{ textAlign: "center", marginBottom: 48 }}>
               <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, background: "rgba(34,211,238,0.05)", border: "1px solid rgba(34,211,238,0.12)", marginBottom: 20 }}>
                 <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#22D3EE" }} />
@@ -518,7 +481,6 @@ export default function OnboardingPage() {
               </p>
             </div>
 
-            {/* Hero Cards */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 24, alignItems: "stretch" }}>
               {HEROES.map(hero => (
                 <HeroCard
@@ -530,13 +492,11 @@ export default function OnboardingPage() {
               ))}
             </div>
 
-            {/* Comparison */}
             <div style={{ marginBottom: 32 }}>
               <div style={{ fontSize: 9, color: "#1A2535", fontFamily: "var(--font-geist-mono)", letterSpacing: "0.14em", marginBottom: 10, textAlign: "center" }}>PERBANDINGAN SINGKAT</div>
               <ComparisonTable selected={selected} />
             </div>
 
-            {/* CTA */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
               {error && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", borderRadius: 10, background: "rgba(248,113,113,0.05)", border: "1px solid rgba(248,113,113,0.18)", color: "#F87171", fontSize: 12 }}>

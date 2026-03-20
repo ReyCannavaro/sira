@@ -1,217 +1,144 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getLevelProgress } from "@/lib/utils/level";
 import { formatExp } from "@/lib/utils/format";
-import { cn } from "@/lib/utils/cn";
 import Navbar from "@/components/navigation/Navbar";
-import type { QuestMapData, RegionWithProgress } from "@/types";
+import type { QuestMapData } from "@/types";
 
 interface UserStats {
-  current_level: number;
-  total_exp:     number;
-  weekly_exp:    number;
+  current_level:  number;
+  total_exp:      number;
+  weekly_exp:     number;
   current_streak: number;
 }
-
 interface Profile {
   username:     string;
   display_name: string;
   avatar_url:   string | null;
   hero_class:   string | null;
 }
-
 type RegionKey = "coastal" | "highlands" | "citadel";
 
-const REGION_META: Record<RegionKey, { label: string; color: string; slug: string }> = {
-  coastal:    { label: "Coastal Republic", color: "#22D3EE", slug: "coastal-republic"   },
-  highlands:  { label: "Data Highlands",   color: "#A78BFA", slug: "data-highlands"     },
-  citadel:    { label: "Logic Citadel",    color: "#F59E0B", slug: "logic-citadel"      },
+const REGION_META: Record<RegionKey, {
+  label: string; color: string; slug: string; subtitle: string;
+}> = {
+  coastal:   { label: "Coastal Republic", color: "#22D3EE", slug: "coastal-republic",   subtitle: "Web Development"       },
+  highlands: { label: "Data Highlands",   color: "#A78BFA", slug: "data-highlands",     subtitle: "Machine Learning & AI" },
+  citadel:   { label: "Logic Citadel",    color: "#F59E0B", slug: "logic-citadel",       subtitle: "Computer Science"      },
 };
 
-function generateNodePositions(count: number, offsetX: number, baseY: number): { x: number; y: number }[] {
-  const positions: { x: number; y: number }[] = [];
-  const spacing = 90;
-  const amplitude = 60;
+const DIFF_COLOR: Record<string, string> = {
+  easy: "#34D399", normal: "#22D3EE", hard: "#A78BFA", expert: "#F59E0B",
+};
+const DIFF_LABEL: Record<string, string> = {
+  easy: "Mudah", normal: "Normal", hard: "Sulit", expert: "Expert",
+};
 
-  for (let i = 0; i < count; i++) {
-    const x = offsetX + i * spacing;
-    const wave = Math.sin((i / (count - 1)) * Math.PI * 3) * amplitude;
-    positions.push({ x, y: baseY + wave });
-  }
-  return positions;
-}
-
-const COASTAL_POS   = generateNodePositions(40, 80,  180);
-const HIGHLANDS_POS = generateNodePositions(40, 80,  360);
-const CITADEL_POS   = generateNodePositions(40, 80,  540);
-
-function NeonBadge({ children, color = "#22D3EE" }: { children: React.ReactNode; color?: string }) {
+function NeonBadge({ children, color = "#22D3EE", sm }: {
+  children: React.ReactNode; color?: string; sm?: boolean;
+}) {
   return (
-    <span
-      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wider"
-      style={{
-        border:     `1px solid ${color}33`,
-        background: `${color}15`,
-        color,
-        fontFamily: "var(--font-geist-mono)",
-      }}
-    >
+    <span style={{
+      display: "inline-flex", alignItems: "center",
+      padding: sm ? "1px 8px" : "2px 10px",
+      borderRadius: 999,
+      border: `1px solid ${color}44`, background: `${color}18`, color,
+      fontSize: sm ? 10 : 11, fontFamily: "var(--font-geist-mono)", fontWeight: 700,
+      letterSpacing: "0.05em",
+    }}>
       {children}
     </span>
   );
 }
 
-function XPBar({
-  current,
-  max,
-  color = "#22D3EE",
-  height = 6,
-}: {
-  current: number;
-  max:     number;
-  color?:  string;
-  height?: number;
+function XPBar({ current, max, color = "#22D3EE", h = 6 }: {
+  current: number; max: number; color?: string; h?: number;
 }) {
-  const pct = Math.min((current / max) * 100, 100);
   return (
-    <div
-      className="w-full rounded-full overflow-hidden"
-      style={{ background: "#334155", height }}
-    >
-      <div
-        className="h-full rounded-full transition-all duration-1000"
-        style={{
-          width:      `${pct}%`,
-          background: `linear-gradient(90deg, ${color}99, ${color})`,
-          boxShadow:  `0 0 8px ${color}66`,
-        }}
-      />
+    <div style={{ width: "100%", background: "#1E293B", borderRadius: 999, height: h, overflow: "hidden" }}>
+      <div style={{
+        height: "100%", borderRadius: 999,
+        width: `${Math.min((current / max) * 100, 100)}%`,
+        background: `linear-gradient(90deg, ${color}88, ${color})`,
+        boxShadow: `0 0 6px ${color}55`,
+        transition: "width 1s cubic-bezier(.4,0,.2,1)",
+      }} />
     </div>
   );
 }
 
-type NodeStatus = "done" | "active" | "locked";
+function Shimmer({ h, r = 8 }: { h: number; r?: number }) {
+  return <div className="shimmer" style={{ height: h, borderRadius: r }} />;
+}
 
-function QuestNode({
-  quest,
-  color,
-  x,
-  y,
-  index,
-  isHovered,
-  isSelected,
-  onHover,
-  onClick,
-}: {
-  quest:      QuestMapData;
-  color:      string;
-  x:          number;
-  y:          number;
-  index:      number;
-  isHovered:  boolean;
-  isSelected: boolean;
-  onHover:    (v: boolean) => void;
-  onClick:    () => void;
+function buildPositions(count: number, viewW = 760): { x: number; y: number }[] {
+  const cols  = 10;
+  const cellW = viewW / cols;
+  const cellH = 74;
+  return Array.from({ length: count }, (_, i) => {
+    const row  = Math.floor(i / cols);
+    const col  = row % 2 === 0 ? i % cols : cols - 1 - (i % cols);
+    return { x: cellW * col + cellW / 2, y: 44 + row * cellH };
+  });
+}
+
+function QuestNode({ quest, pos, color, hovered, selected, onHover, onClick, idx }: {
+  quest: QuestMapData; pos: { x: number; y: number };
+  color: string; hovered: boolean; selected: boolean;
+  onHover: (v: boolean) => void; onClick: () => void; idx: number;
 }) {
-  const status = quest.status as NodeStatus;
-  const r      = 20;
-  const active = isHovered || isSelected;
-
-  const bgColor =
-    status === "done"   ? `${color}33` :
-    status === "active" ? "transparent" :
-    "transparent";
-
-  const borderColor =
-    status === "locked" ? "#475569" : color;
+  const done   = quest.status === "done";
+  const active = quest.status === "active";
+  const locked = quest.status === "locked";
+  const lit    = hovered || selected;
+  const r      = 18;
 
   return (
     <g
-      transform={`translate(${x},${y})`}
+      transform={`translate(${pos.x},${pos.y})`}
       style={{
-        cursor:    status !== "locked" ? "pointer" : "default",
-        animation: `node-appear 0.5s ${index * 0.04}s ease both`,
+        cursor: locked ? "default" : "pointer",
+        animation: `node-pop .45s ${Math.min(idx * 0.022, 1.2)}s both`,
       }}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
-      onClick={status !== "locked" ? onClick : undefined}
+      onClick={locked ? undefined : onClick}
     >
-      {status === "active" && (
-        <circle
-          r={r + 9}
-          fill="none"
-          stroke={color}
-          strokeWidth="1"
-          opacity="0.25"
-          style={{ animation: "pulse-glow 2s ease-in-out infinite" }}
-        />
+      {active && (
+        <circle r={r + 9} fill="none" stroke={color} strokeWidth="1"
+          opacity="0.18" style={{ animation: "ring-pulse 2.8s ease-in-out infinite" }} />
       )}
 
-      {active && status !== "locked" && (
-        <circle
-          r={r + 5}
-          fill="none"
-          stroke={color}
-          strokeWidth="1"
-          opacity="0.4"
-        />
+      {lit && !locked && (
+        <circle r={r + 5} fill="none" stroke={color} strokeWidth="1" opacity="0.3" />
       )}
 
       <circle
-        r={active && status !== "locked" ? r + 3 : r}
-        fill={bgColor}
-        stroke={borderColor}
-        strokeWidth={status === "locked" ? 1.5 : 2}
-        strokeDasharray={status === "locked" ? "4,2" : "none"}
+        r={lit && !locked ? r + 2 : r}
+        fill={done ? `${color}22` : active ? `${color}0e` : "#131F33"}
+        stroke={locked ? "#263348" : color}
+        strokeWidth={locked ? 1 : 1.8}
+        strokeDasharray={locked ? "3,3" : undefined}
         style={{
-          transition: "r 0.15s ease",
-          filter:     status !== "locked" && active
-            ? `drop-shadow(0 0 10px ${color})`
-            : status !== "locked"
-            ? `drop-shadow(0 0 4px ${color}66)`
-            : "none",
+          transition: "r .15s ease",
+          filter: !locked ? `drop-shadow(0 0 ${lit ? 9 : 3}px ${color}${lit ? "99" : "44"})` : "none",
         }}
       />
 
-      <text
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize={status === "locked" ? 12 : 14}
-        fill={status === "locked" ? "#475569" : color}
-        style={{ userSelect: "none" }}
-      >
-        {status === "done"   ? "✓" :
-         status === "active" ? "▶" :
-         "🔒"}
-      </text>
-
-      {active && (
+      {done && <circle r={5} fill={color} opacity="0.9" style={{ filter: `drop-shadow(0 0 3px ${color})` }} />}
+      {active && <circle r={3.5} fill={color} opacity="0.8" style={{ animation: "ring-pulse 1.8s ease-in-out infinite" }} />}
+      {lit && (
         <g>
-          <rect
-            x={-52}
-            y={r + 5}
-            width={104}
-            height={22}
-            rx={5}
-            fill="rgba(7,15,26,0.97)"
-            stroke={color}
-            strokeWidth="1"
-          />
-          <text
-            x={0}
-            y={r + 19}
-            textAnchor="middle"
-            fontSize={9}
-            fill={color}
+          <rect x={-54} y={r + 5} width={108} height={22} rx={4}
+            fill="rgba(8,14,26,0.97)" stroke={color} strokeWidth="0.7" />
+          <text x={0} y={r + 19} textAnchor="middle"
+            fontSize={8.5} fill={color}
             fontFamily="var(--font-geist-mono)"
-            style={{ userSelect: "none" }}
-          >
-            {quest.title.length > 18
-              ? quest.title.slice(0, 18) + "…"
-              : quest.title}
+            style={{ userSelect: "none" }}>
+            {quest.title.length > 22 ? quest.title.slice(0, 21) + "…" : quest.title}
           </text>
         </g>
       )}
@@ -219,281 +146,188 @@ function QuestNode({
   );
 }
 
-function AdventureMapSVG({
-  coastalQuests,
-  highlandsQuests,
-  citadelQuests,
-  selectedQuest,
-  onSelectQuest,
-}: {
-  coastalQuests:   QuestMapData[];
-  highlandsQuests: QuestMapData[];
-  citadelQuests:   QuestMapData[];
-  selectedQuest:   QuestMapData | null;
-  onSelectQuest:   (q: QuestMapData | null) => void;
+function RegionMap({ quests, color, selectedId, onSelect }: {
+  quests: QuestMapData[]; color: string;
+  selectedId: string | null; onSelect: (q: QuestMapData | null) => void;
 }) {
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
-
-  const svgWidth  = 80 + 39 * 90 + 80;
-  const svgHeight = 700;
-
-  function renderConnections(quests: QuestMapData[], positions: { x: number; y: number }[], color: string) {
-    return quests.slice(0, -1).map((q, i) => {
-      const next   = quests[i + 1];
-      const p1     = positions[i];
-      const p2     = positions[i + 1];
-      const active = q.status !== "locked" && next.status !== "locked";
-      return (
-        <line
-          key={`${q.id}-${next.id}`}
-          x1={p1.x} y1={p1.y}
-          x2={p2.x} y2={p2.y}
-          stroke={active ? color : "#334155"}
-          strokeWidth={active ? 1.5 : 1}
-          strokeDasharray={active ? "none" : "4,4"}
-          opacity={active ? 0.5 : 0.25}
-        />
-      );
-    });
-  }
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const viewW  = 760;
+  const rows   = Math.ceil(quests.length / 10);
+  const viewH  = 44 + rows * 74 + 28;
+  const pos    = buildPositions(quests.length, viewW);
 
   return (
-    <div className="relative" style={{ overflowX: "auto" }}>
-      <div
-        className="absolute left-0 top-0 bottom-0 z-10 pointer-events-none"
-        style={{ width: 60 }}
-      >
-        {(
-          [
-            { label: "WEB", color: "#22D3EE", y: 180 },
-            { label: "ML",  color: "#A78BFA", y: 360 },
-            { label: "CS",  color: "#F59E0B", y: 540 },
-          ] as { label: string; color: string; y: number }[]
-        ).map(({ label, color, y }) => (
-          <div
-            key={label}
-            className="absolute text-[10px] font-bold tracking-widest"
-            style={{
-              top:       y - 8,
-              left:      8,
-              color,
+    <svg viewBox={`0 0 ${viewW} ${viewH}`} width="100%" style={{ display: "block" }}>
+      <defs>
+        <pattern id={`dot-${color.slice(1)}`} width="38" height="38" patternUnits="userSpaceOnUse">
+          <circle cx="19" cy="19" r="0.7" fill="#334155" opacity="0.5" />
+        </pattern>
+      </defs>
+      <rect width={viewW} height={viewH} fill={`url(#dot-${color.slice(1)})`} />
+
+      {[1, 2, 3].map(ch => (
+        <g key={ch}>
+          <line x1={ch * (viewW / 4)} y1={0} x2={ch * (viewW / 4)} y2={viewH}
+            stroke={color} strokeWidth="0.8" strokeDasharray="2,10" opacity="0.1" />
+          <text x={ch * (viewW / 4) + 4} y={12}
+            fontSize={7.5} fill={color} opacity="0.25" fontFamily="var(--font-geist-mono)">
+            CH{ch + 1}
+          </text>
+        </g>
+      ))}
+      <text x={6} y={12} fontSize={7.5} fill={color} opacity="0.25" fontFamily="var(--font-geist-mono)">CH1</text>
+
+      {quests.slice(0, -1).map((q, i) => {
+        const p1  = pos[i];
+        const p2  = pos[i + 1];
+        const active = q.status !== "locked" && quests[i + 1]?.status !== "locked";
+        if (!p1 || !p2) return null;
+        return (
+          <line key={i}
+            x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+            stroke={active ? color : "#1E2D3D"}
+            strokeWidth={active ? 1.4 : 0.8}
+            strokeDasharray={active ? undefined : "3,5"}
+            opacity={active ? 0.45 : 0.35}
+          />
+        );
+      })}
+
+      {quests.map((q, i) => (
+        <QuestNode
+          key={q.id}
+          quest={q}
+          pos={pos[i] ?? { x: 0, y: 0 }}
+          color={color}
+          hovered={hoverId === q.id}
+          selected={selectedId === q.id}
+          onHover={v => setHoverId(v ? q.id : null)}
+          onClick={() => onSelect(selectedId === q.id ? null : q)}
+          idx={i}
+        />
+      ))}
+    </svg>
+  );
+}
+
+function QuestPanel({ quest, color, slug, onClose }: {
+  quest: QuestMapData; color: string; slug: string; onClose: () => void;
+}) {
+  const router = useRouter();
+  const done   = quest.status === "done";
+
+  return (
+    <div style={{
+      borderRadius: 14, overflow: "hidden",
+      background: "#0F1A2E",
+      border: `1px solid ${color}33`,
+      animation: "slide-in .2s ease",
+    }}>
+      <div style={{ height: 2, background: `linear-gradient(90deg, ${color}, ${color}33)` }} />
+      <div style={{ padding: "16px 18px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+          <NeonBadge color={color} sm>{DIFF_LABEL[quest.difficulty] ?? quest.difficulty}</NeonBadge>
+          <NeonBadge color="#34D399" sm>+{quest.exp_reward} EXP</NeonBadge>
+          {done && <NeonBadge color="#34D399" sm>Selesai</NeonBadge>}
+        </div>
+
+        <p style={{
+          fontFamily: "var(--font-geist-mono)", fontSize: 14, fontWeight: 700,
+          color: "#F1F5F9", marginBottom: 4, lineHeight: 1.35,
+        }}>
+          {quest.title}
+        </p>
+        <p style={{ fontSize: 11, color: "#2D3F55", marginBottom: 14 }}>Quest #{quest.order_index}</p>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onClose} style={{
+            padding: "8px 14px", borderRadius: 9, border: "1px solid #1E2D3D",
+            background: "none", color: "#475569", cursor: "pointer", fontSize: 12,
+            transition: "all .2s",
+          }}>
+            Tutup
+          </button>
+          {done ? (
+            <button onClick={() => router.push(`/adventure/${slug}/${quest.slug}`)} style={{
+              flex: 1, padding: "8px 0", borderRadius: 9,
+              border: `1px solid ${color}55`, background: "transparent",
+              color, cursor: "pointer", fontSize: 12, fontWeight: 700,
               fontFamily: "var(--font-geist-mono)",
-              writingMode: "vertical-rl",
-              transform:  "rotate(180deg)",
-            }}
-          >
-            {label}
-          </div>
-        ))}
+            }}>
+              Kerjakan Ulang
+            </button>
+          ) : (
+            <button onClick={() => router.push(`/adventure/${slug}/${quest.slug}`)} style={{
+              flex: 1, padding: "8px 0", borderRadius: 9,
+              border: "none", background: color,
+              color: "#080E1A", cursor: "pointer", fontSize: 12, fontWeight: 700,
+              fontFamily: "var(--font-geist-mono)",
+              boxShadow: `0 0 16px ${color}33`,
+            }}>
+              Mulai Quest
+            </button>
+          )}
+        </div>
       </div>
-
-      <svg
-        width={svgWidth}
-        height={svgHeight}
-        style={{ display: "block", minWidth: svgWidth }}
-      >
-        <defs>
-          <pattern id="adv-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(71,85,105,0.1)" strokeWidth="1" />
-          </pattern>
-          <linearGradient id="grad-coastal" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#22D3EE" stopOpacity="0.03" />
-            <stop offset="100%" stopColor="#22D3EE" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="grad-highlands" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#A78BFA" stopOpacity="0.03" />
-            <stop offset="100%" stopColor="#A78BFA" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="grad-citadel" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.03" />
-            <stop offset="100%" stopColor="#F59E0B" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
-        <rect width="100%" height="100%" fill="url(#adv-grid)" />
-        <rect x={0} y={100} width="100%" height={160} fill="url(#grad-coastal)" />
-        <rect x={0} y={280} width="100%" height={160} fill="url(#grad-highlands)" />
-        <rect x={0} y={460} width="100%" height={160} fill="url(#grad-citadel)" />
-        <line x1={0} y1={270} x2="100%" y2={270} stroke="#22D3EE" strokeWidth="1" opacity="0.08" strokeDasharray="6,6" />
-        <line x1={0} y1={450} x2="100%" y2={450} stroke="#A78BFA" strokeWidth="1" opacity="0.08" strokeDasharray="6,6" />
-
-        {[0, 1, 2, 3].map((ch) => {
-          const x = 80 + ch * 10 * 90 - 40;
-          return (
-            <g key={ch}>
-              <line x1={x} y1={80} x2={x} y2={620} stroke="#334155" strokeWidth="1" strokeDasharray="3,8" opacity="0.4" />
-              <text x={x + 8} y={95} fontSize={9} fill="#475569" fontFamily="var(--font-geist-mono)">
-                CH{ch + 1}
-              </text>
-            </g>
-          );
-        })}
-
-        {renderConnections(coastalQuests,   COASTAL_POS,   "#22D3EE")}
-        {renderConnections(highlandsQuests, HIGHLANDS_POS, "#A78BFA")}
-        {renderConnections(citadelQuests,   CITADEL_POS,   "#F59E0B")}
-
-        {coastalQuests.map((quest, i) => (
-          <QuestNode
-            key={quest.id}
-            quest={quest}
-            color="#22D3EE"
-            x={COASTAL_POS[i]?.x ?? 0}
-            y={COASTAL_POS[i]?.y ?? 0}
-            index={i}
-            isHovered={hoveredId === quest.id}
-            isSelected={selectedQuest?.id === quest.id}
-            onHover={(v) => setHoveredId(v ? quest.id : null)}
-            onClick={() => onSelectQuest(quest)}
-          />
-        ))}
-
-        {highlandsQuests.map((quest, i) => (
-          <QuestNode
-            key={quest.id}
-            quest={quest}
-            color="#A78BFA"
-            x={HIGHLANDS_POS[i]?.x ?? 0}
-            y={HIGHLANDS_POS[i]?.y ?? 0}
-            index={i + 40}
-            isHovered={hoveredId === quest.id}
-            isSelected={selectedQuest?.id === quest.id}
-            onHover={(v) => setHoveredId(v ? quest.id : null)}
-            onClick={() => onSelectQuest(quest)}
-          />
-        ))}
-
-        {citadelQuests.map((quest, i) => (
-          <QuestNode
-            key={quest.id}
-            quest={quest}
-            color="#F59E0B"
-            x={CITADEL_POS[i]?.x ?? 0}
-            y={CITADEL_POS[i]?.y ?? 0}
-            index={i + 80}
-            isHovered={hoveredId === quest.id}
-            isSelected={selectedQuest?.id === quest.id}
-            onHover={(v) => setHoveredId(v ? quest.id : null)}
-            onClick={() => onSelectQuest(quest)}
-          />
-        ))}
-      </svg>
     </div>
   );
 }
 
-function QuestDetailPanel({
-  quest,
-  regionColor,
-  onClose,
-  onStart,
-}: {
-  quest:       QuestMapData;
-  regionColor: string;
-  onClose:     () => void;
-  onStart:     () => void;
+function ActiveQuestCard({ quest, color, regionSlug, onFocus }: {
+  quest: QuestMapData; color: string; regionSlug: string; onFocus: () => void;
 }) {
-  const diffColor: Record<string, string> = {
-    easy:   "#34D399",
-    normal: "#22D3EE",
-    hard:   "#A78BFA",
-    expert: "#F59E0B",
-  };
-  const diffLabel: Record<string, string> = {
-    easy:   "Mudah",
-    normal: "Normal",
-    hard:   "Sulit",
-    expert: "Expert",
-  };
-
+  const router = useRouter();
   return (
     <div
-      className="flex items-center justify-between rounded-xl p-5 mt-4"
+      onClick={onFocus}
       style={{
-        background:   "#1E293B",
-        border:       `1px solid ${regionColor}44`,
-        borderLeft:   `3px solid ${regionColor}`,
-        animation:    "scale-in 0.2s ease",
+        padding: "12px 14px", borderRadius: 10, cursor: "pointer",
+        background: "#0B1524", border: "1px solid #1A2535",
+        transition: "all .18s",
+      }}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLElement).style.borderColor = `${color}44`;
+        (e.currentTarget as HTMLElement).style.background  = "#0F1A2E";
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLElement).style.borderColor = "#1A2535";
+        (e.currentTarget as HTMLElement).style.background  = "#0B1524";
       }}
     >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-3 mb-2 flex-wrap">
-          <span
-            className="text-lg font-bold text-ghost-white"
-            style={{ fontFamily: "var(--font-geist-mono)" }}
-          >
-            {quest.title}
-          </span>
-          <NeonBadge color={regionColor}>+{quest.exp_reward} EXP</NeonBadge>
-          <NeonBadge color={diffColor[quest.difficulty] ?? "#94A3B8"}>
-            {diffLabel[quest.difficulty] ?? quest.difficulty}
-          </NeonBadge>
-        </div>
-        <p className="text-sm text-text-secondary">
-          Quest #{quest.order_index} · Klik "Mulai" untuk membuka editor kode
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+        <p style={{
+          fontFamily: "var(--font-geist-mono)", fontSize: 12, fontWeight: 700,
+          color: "#D1D5DB", lineHeight: 1.35, flex: 1, minWidth: 0,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          marginRight: 8,
+        }}>
+          {quest.title}
         </p>
+        <NeonBadge color={DIFF_COLOR[quest.difficulty] ?? "#94A3B8"} sm>
+          {DIFF_LABEL[quest.difficulty] ?? quest.difficulty}
+        </NeonBadge>
       </div>
-
-      <div className="flex items-center gap-3 ml-4 shrink-0">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <NeonBadge color={color} sm>+{quest.exp_reward} EXP</NeonBadge>
         <button
-          onClick={onClose}
-          className="px-4 py-2 rounded-lg text-sm text-text-secondary border border-deep-slate hover:text-ghost-white transition-colors"
-          style={{ background: "none" }}
-        >
-          Tutup
-        </button>
-        <button
-          onClick={onStart}
-          className="px-5 py-2 rounded-lg text-sm font-bold transition-all hover:opacity-90"
+          onClick={e => { e.stopPropagation(); router.push(`/adventure/${regionSlug}/${quest.slug}`); }}
           style={{
-            background: regionColor,
-            color:      "#0F172A",
-            border:     "none",
-            cursor:     "pointer",
+            padding: "4px 12px", borderRadius: 7, border: "none",
+            background: color, color: "#080E1A",
+            fontSize: 11, fontWeight: 700, cursor: "pointer",
             fontFamily: "var(--font-geist-mono)",
-            boxShadow:  `0 0 16px ${regionColor}44`,
           }}
         >
-          Mulai Quest →
+          Mulai
         </button>
       </div>
     </div>
-  );
-}
-
-function StatCard({ label, value, icon, color }: { label: string; value: string; icon: string; color: string }) {
-  return (
-    <div
-      className="flex items-center gap-3 px-4 py-3 rounded-xl"
-      style={{ background: "#1E293B", border: "1px solid #334155" }}
-    >
-      <span className="text-xl">{icon}</span>
-      <div>
-        <div
-          className="text-base font-bold"
-          style={{ color, fontFamily: "var(--font-geist-mono)" }}
-        >
-          {value}
-        </div>
-        <div className="text-xs text-text-muted">{label}</div>
-      </div>
-    </div>
-  );
-}
-
-function SkeletonBlock({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return (
-    <div
-      className={cn("rounded-lg shimmer", className)}
-      style={{ background: "#1E293B", ...style }}
-    />
   );
 }
 
 export default function AdventurePage() {
   const router       = useRouter();
   const searchParams = useSearchParams();
-  const notice       = searchParams.get("notice");
 
   const [profile,         setProfile]         = useState<Profile | null>(null);
   const [stats,           setStats]           = useState<UserStats | null>(null);
@@ -501,119 +335,102 @@ export default function AdventurePage() {
   const [highlandsQuests, setHighlandsQuests] = useState<QuestMapData[]>([]);
   const [citadelQuests,   setCitadelQuests]   = useState<QuestMapData[]>([]);
   const [selectedQuest,   setSelectedQuest]   = useState<QuestMapData | null>(null);
-  const [loading,         setLoading]         = useState(true);
   const [activeRegion,    setActiveRegion]    = useState<RegionKey>("coastal");
-  const [noticeMsg,       setNoticeMsg]       = useState("");
+  const [loading,         setLoading]         = useState(true);
+  const [notice,          setNotice]          = useState("");
 
   useEffect(() => {
-    if (notice === "leaderboard_locked") {
-      setNoticeMsg("🔒 Leaderboard terbuka di Level 10. Terus belajar!");
-      setTimeout(() => setNoticeMsg(""), 4000);
+    const n = searchParams.get("notice");
+    if (n === "leaderboard_locked") {
+      setNotice("Leaderboard terbuka di Level 10. Terus belajar!");
+      const t = setTimeout(() => setNotice(""), 4000);
+      return () => clearTimeout(t);
     }
-  }, [notice]);
+  }, [searchParams]);
 
   useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      const supabase = createSupabaseBrowserClient();
-
-      const { data: { user } } = await supabase.auth.getUser();
+    async function load() {
+      const sb = createSupabaseBrowserClient();
+      const { data: { user } } = await sb.auth.getUser();
       if (!user) { router.push("/login"); return; }
 
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("username, display_name, avatar_url, hero_class")
-        .eq("id", user.id)
-        .single();
+      const [profRes, statsRes, attRes] = await Promise.all([
+        sb.from("profiles").select("username,display_name,avatar_url,hero_class").eq("id", user.id).single(),
+        sb.from("user_stats").select("current_level,total_exp,weekly_exp,current_streak").eq("user_id", user.id).single(),
+        sb.from("quest_attempts").select("quest_id,status").eq("user_id", user.id),
+      ]);
 
-      const { data: st } = await supabase
-        .from("user_stats")
-        .select("current_level, total_exp, weekly_exp, current_streak")
-        .eq("user_id", user.id)
-        .single();
-
-      setProfile(prof);
-      setStats(st);
-
-      const { data: attempts } = await supabase
-        .from("quest_attempts")
-        .select("quest_id, status")
-        .eq("user_id", user.id);
+      setProfile(profRes.data);
+      setStats(statsRes.data);
 
       const completedIds = new Set(
-        (attempts ?? [])
-          .filter((a) => a.status === "passed_clean" || a.status === "passed_dirty")
-          .map((a) => a.quest_id)
+        (attRes.data ?? [])
+          .filter(a => a.status === "passed_clean" || a.status === "passed_dirty")
+          .map(a => a.quest_id)
       );
 
-      async function fetchRegionQuests(regionSlug: string): Promise<QuestMapData[]> {
-        const { data: region } = await supabase
-          .from("regions")
-          .select("id")
-          .eq("slug", regionSlug)
-          .single();
-
-        if (!region) return [];
-
-        const { data: quests } = await supabase
-          .from("quests")
-          .select("id, slug, title, difficulty, exp_reward, order_index, prerequisite_quest_id")
-          .eq("region_id", region.id)
-          .eq("is_active", true)
+      async function fetchRegion(regionSlug: string): Promise<QuestMapData[]> {
+        const { data: reg } = await sb.from("regions").select("id").eq("slug", regionSlug).single();
+        if (!reg) return [];
+        const { data: qs } = await sb.from("quests")
+          .select("id,slug,title,difficulty,exp_reward,order_index")
+          .eq("region_id", reg.id).eq("is_active", true)
           .order("order_index", { ascending: true });
-
-        if (!quests) return [];
-
-        return quests.map((q, i) => {
-          const isDone = completedIds.has(q.id);
-          const prevDone = i === 0 || completedIds.has(quests[i - 1].id);
-          const status: "done" | "active" | "locked" =
-            isDone ? "done" : prevDone ? "active" : "locked";
-
+        if (!qs) return [];
+        return qs.map((q, i) => {
+          const done = completedIds.has(q.id);
+          const prev = i === 0 || completedIds.has(qs[i - 1].id);
           return {
-            id:          q.id,
-            slug:        q.slug,
-            title:       q.title,
-            difficulty:  q.difficulty,
-            exp_reward:  q.exp_reward,
+            id: q.id, slug: q.slug, title: q.title,
+            difficulty: q.difficulty, exp_reward: q.exp_reward,
             order_index: q.order_index,
-            status,
+            status: done ? "done" : prev ? "active" : "locked",
           };
         });
       }
 
-      const [coastal, highlands, citadel] = await Promise.all([
-        fetchRegionQuests("coastal-republic"),
-        fetchRegionQuests("data-highlands"),
-        fetchRegionQuests("logic-citadel"),
+      const [c, h, l] = await Promise.all([
+        fetchRegion("coastal-republic"),
+        fetchRegion("data-highlands"),
+        fetchRegion("logic-citadel"),
       ]);
-
-      setCoastalQuests(coastal);
-      setHighlandsQuests(highlands);
-      setCitadelQuests(citadel);
+      setCoastalQuests(c);
+      setHighlandsQuests(h);
+      setCitadelQuests(l);
       setLoading(false);
     }
-
-    loadData();
+    load();
   }, [router]);
 
-  const levelProgress = stats ? getLevelProgress(stats.total_exp) : null;
-  const mapRef = useRef<HTMLDivElement>(null);
-
-  const completedCounts = {
-    coastal:   coastalQuests.filter((q) => q.status === "done").length,
-    highlands: highlandsQuests.filter((q) => q.status === "done").length,
-    citadel:   citadelQuests.filter((q) => q.status === "done").length,
+  const lvProgress = stats ? getLevelProgress(stats.total_exp) : null;
+  const questsByRegion: Record<RegionKey, QuestMapData[]> = {
+    coastal: coastalQuests, highlands: highlandsQuests, citadel: citadelQuests,
   };
-
-  const activeQuests = [
-    ...coastalQuests.filter((q) => q.status === "active"),
-    ...highlandsQuests.filter((q) => q.status === "active"),
-    ...citadelQuests.filter((q) => q.status === "active"),
+  const doneCounts: Record<RegionKey, number> = {
+    coastal:   coastalQuests.filter(q => q.status === "done").length,
+    highlands: highlandsQuests.filter(q => q.status === "done").length,
+    citadel:   citadelQuests.filter(q => q.status === "done").length,
+  };
+  const activeAll = [
+    ...coastalQuests.filter(q => q.status === "active").map(q => ({ quest: q, region: "coastal" as RegionKey })),
+    ...highlandsQuests.filter(q => q.status === "active").map(q => ({ quest: q, region: "highlands" as RegionKey })),
+    ...citadelQuests.filter(q => q.status === "active").map(q => ({ quest: q, region: "citadel" as RegionKey })),
   ];
 
+  const currentMeta    = REGION_META[activeRegion];
+  const currentQuests  = questsByRegion[activeRegion];
+  const currentColor   = currentMeta.color;
+  const totalCurrent   = currentQuests.length || 40;
+  const doneCurrent    = doneCounts[activeRegion];
+
+  function regionOfQuest(id: string): RegionKey {
+    if (coastalQuests.find(q => q.id === id))   return "coastal";
+    if (highlandsQuests.find(q => q.id === id)) return "highlands";
+    return "citadel";
+  }
+
   return (
-    <div className="min-h-screen" style={{ background: "#0F172A", color: "#F8FAFC" }}>
+    <div style={{ minHeight: "100vh", background: "#0F172A", color: "#F8FAFC" }}>
       <Navbar
         username={profile?.username ?? ""}
         displayName={profile?.display_name}
@@ -621,323 +438,247 @@ export default function AdventurePage() {
         currentLevel={stats?.current_level}
       />
 
-      {noticeMsg && (
-        <div
-          className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-xl text-sm font-medium text-ghost-white"
-          style={{
-            background:  "rgba(245,158,11,0.15)",
-            border:      "1px solid rgba(245,158,11,0.4)",
-            animation:   "scale-in 0.3s ease",
-            fontFamily:  "var(--font-inter)",
-          }}
-        >
-          {noticeMsg}
+      {notice && (
+        <div style={{
+          position: "fixed", top: 68, left: "50%", transform: "translateX(-50%)",
+          zIndex: 50, padding: "9px 20px", borderRadius: 10,
+          background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.35)",
+          color: "#F8FAFC", fontSize: 12, fontFamily: "var(--font-geist-mono)",
+          animation: "slide-in .3s ease",
+        }}>
+          {notice}
         </div>
       )}
 
-      <div className="pt-[60px]">
-        <div className="px-8 pt-8 pb-0">
-          <div style={{ animation: "fade-up 0.5s ease both" }}>
-            <h1
-              className="text-3xl font-extrabold text-ghost-white mb-1"
-              style={{ fontFamily: "var(--font-geist-mono)" }}
-            >
-              Adventure Map
-            </h1>
-            <p className="text-sm text-text-secondary">
-              {loading
-                ? "Memuat data..."
-                : `Selamat datang, ${profile?.display_name ?? profile?.username ?? "Prajurit"}! ${
-                    activeQuests.length > 0
-                      ? `${activeQuests.length} quest menunggumu.`
-                      : "Semua quest selesai! 🎉"
-                  }`}
-            </p>
-          </div>
+      <div style={{ paddingTop: 60 }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "28px 28px 0" }}>
 
-          <div
-            className="mt-5 flex items-center justify-between p-5 rounded-xl"
-            style={{ background: "#1E293B", border: "1px solid #334155" }}
-          >
-            {loading ? (
-              <>
-                <SkeletonBlock style={{ width: 80, height: 40 }} />
-                <SkeletonBlock style={{ width: "50%", height: 20 }} />
-              </>
-            ) : (
-              <>
-                <div>
-                  <div
-                    className="text-lg font-bold text-ghost-white mb-1"
-                    style={{ fontFamily: "var(--font-geist-mono)" }}
-                  >
-                    Level {stats?.current_level ?? 1}
-                  </div>
-                  <div className="text-xs text-text-secondary">
-                    {formatExp(stats?.total_exp ?? 0)} EXP total
-                  </div>
-                </div>
-
-                <div className="w-[55%]">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-text-secondary">Progress ke Level {(stats?.current_level ?? 1) + 1}</span>
-                    <NeonBadge color="#22D3EE">{levelProgress?.percent ?? 0}%</NeonBadge>
-                  </div>
-                  <XPBar
-                    current={levelProgress?.currentExp ?? 0}
-                    max={levelProgress?.neededExp ?? 500}
-                  />
-                </div>
-
-                <div className="hidden md:flex items-center gap-4">
-                  <StatCard label="Streak"   value={`${stats?.current_streak ?? 0}🔥`} icon="🔥" color="#F59E0B" />
-                  <StatCard label="Minggu ini" value={`+${formatExp(stats?.weekly_exp ?? 0)}`} icon="⚡" color="#22D3EE" />
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 mt-6 flex-wrap">
-            {(Object.entries(REGION_META) as [RegionKey, typeof REGION_META[RegionKey]][]).map(
-              ([key, meta]) => (
-                <button
-                  key={key}
-                  onClick={() => setActiveRegion(key)}
-                  className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold tracking-wider transition-all duration-200",
-                    activeRegion === key ? "text-[#0F172A]" : "text-text-muted hover:text-text-secondary"
-                  )}
-                  style={{
-                    fontFamily:  "var(--font-geist-mono)",
-                    background:  activeRegion === key ? meta.color : "transparent",
-                    border:      `1px solid ${activeRegion === key ? meta.color : "#334155"}`,
-                    boxShadow:   activeRegion === key ? `0 0 12px ${meta.color}44` : "none",
-                  }}
-                >
-                  <span
-                    className="text-[9px] font-bold"
-                    style={{ color: activeRegion === key ? "#0F172A" : meta.color }}
-                  >
-                    ●
-                  </span>
-                  {meta.label}
-                  <span
-                    className="ml-1 px-1.5 py-0.5 rounded-md text-[10px]"
-                    style={{
-                      background: activeRegion === key ? "rgba(0,0,0,0.2)" : `${meta.color}20`,
-                      color:      activeRegion === key ? "#0F172A" : meta.color,
-                    }}
-                  >
-                    {completedCounts[key]}/40
-                  </span>
-                </button>
-              )
-            )}
-          </div>
-        </div>
-
-        <div className="px-8 mt-6">
-          <div
-            ref={mapRef}
-            className="rounded-2xl overflow-hidden relative"
-            style={{
-              background:   "#1E293B",
-              border:       "1px solid #334155",
-              overflowX:    "auto",
-            }}
-          >
-            <div
-              className="absolute top-4 left-4 z-10 flex items-center gap-2 flex-wrap"
-              style={{ pointerEvents: "none" }}
-            >
-              {(Object.entries(REGION_META) as [RegionKey, typeof REGION_META[RegionKey]][]).map(
-                ([key, meta]) => (
-                  <div
-                    key={key}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider"
-                    style={{
-                      background:  "rgba(7,15,26,0.85)",
-                      backdropFilter: "blur(8px)",
-                      border:      `1px solid ${meta.color}44`,
-                      color:       meta.color,
-                      fontFamily:  "var(--font-geist-mono)",
-                    }}
-                  >
-                    <span className="text-[8px]">●</span>
-                    {meta.label}
-                  </div>
-                )
-              )}
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 20 }}>
+            <div style={{ animation: "fade-up .45s ease both" }}>
+              <h1 style={{ fontFamily: "var(--font-geist-mono)", fontSize: 24, fontWeight: 800, color: "#F1F5F9", marginBottom: 3 }}>
+                Adventure Map
+              </h1>
+              <p style={{ fontSize: 13, color: "#3D4F6A" }}>
+                {loading
+                  ? "Memuat data..."
+                  : `${profile?.display_name ?? profile?.username ?? "Prajurit"} — ${activeAll.length > 0 ? `${activeAll.length} quest aktif` : "Semua quest selesai"}`}
+              </p>
             </div>
 
-            {loading ? (
-              <div className="flex items-center justify-center h-[500px]">
-                <div className="text-center">
-                  <div
-                    className="text-4xl mb-4"
-                    style={{ animation: "float 2s ease-in-out infinite" }}
-                  >
-                    🗺️
+            {!loading && stats && (
+              <div style={{ display: "flex", alignItems: "center", gap: 24, animation: "fade-up .5s ease both" }}>
+                {[
+                  { label: "EXP",       value: formatExp(stats.total_exp),      color: "#F1F5F9" },
+                  { label: "Streak",    value: `${stats.current_streak}d`,       color: "#F59E0B" },
+                  { label: "Minggu ini",value: `+${formatExp(stats.weekly_exp)}`, color: "#22D3EE" },
+                ].map(s => (
+                  <div key={s.label} style={{ textAlign: "right" }}>
+                    <p style={{ fontSize: 11, color: "#1E2D42", marginBottom: 1 }}>{s.label}</p>
+                    <p style={{ fontFamily: "var(--font-geist-mono)", fontSize: 13, fontWeight: 700, color: s.color }}>{s.value}</p>
                   </div>
-                  <p className="text-sm text-text-muted">Memuat adventure map...</p>
-                </div>
+                ))}
               </div>
-            ) : (
-              <AdventureMapSVG
-                coastalQuests={coastalQuests}
-                highlandsQuests={highlandsQuests}
-                citadelQuests={citadelQuests}
-                selectedQuest={selectedQuest}
-                onSelectQuest={setSelectedQuest}
-              />
-            )}
-          </div>
-
-          <p className="text-center text-xs text-text-muted mt-2">
-            ← Geser map untuk melihat semua quest →
-          </p>
-
-          {selectedQuest && (
-            <QuestDetailPanel
-              quest={selectedQuest}
-              regionColor={
-                coastalQuests.find((q) => q.id === selectedQuest.id)
-                  ? "#22D3EE"
-                  : highlandsQuests.find((q) => q.id === selectedQuest.id)
-                  ? "#A78BFA"
-                  : "#F59E0B"
-              }
-              onClose={() => setSelectedQuest(null)}
-              onStart={() => {
-                const region = coastalQuests.find((q) => q.id === selectedQuest.id)
-                  ? "coastal-republic"
-                  : highlandsQuests.find((q) => q.id === selectedQuest.id)
-                  ? "data-highlands"
-                  : "logic-citadel";
-                router.push(`/adventure/${region}/${selectedQuest.slug}`);
-              }}
-            />
-          )}
-        </div>
-
-        <div className="px-8 mt-8 pb-12">
-          <div className="flex items-center justify-between mb-4">
-            <h2
-              className="text-xl font-bold text-ghost-white"
-              style={{ fontFamily: "var(--font-geist-mono)" }}
-            >
-              Quest Aktif
-            </h2>
-            {activeQuests.length > 0 && (
-              <NeonBadge color="#22D3EE">{activeQuests.length} tersedia</NeonBadge>
             )}
           </div>
 
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {[...Array(6)].map((_, i) => (
-                <SkeletonBlock key={i} style={{ height: 120 }} />
-              ))}
-            </div>
-          ) : activeQuests.length === 0 ? (
-            <div
-              className="flex flex-col items-center justify-center py-16 rounded-2xl text-center"
-              style={{ background: "#1E293B", border: "1px solid #334155" }}
-            >
-              <div className="text-5xl mb-4">🏆</div>
-              <p className="text-lg font-bold text-ghost-white mb-2">
-                Semua quest selesai!
-              </p>
-              <p className="text-sm text-text-secondary">
-                Kamu sudah menyelesaikan semua quest yang tersedia.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {activeQuests.slice(0, 6).map((quest, i) => {
-                const isCoastal   = coastalQuests.find((q) => q.id === quest.id);
-                const isHighlands = highlandsQuests.find((q) => q.id === quest.id);
-                const col         = isCoastal ? "#22D3EE" : isHighlands ? "#A78BFA" : "#F59E0B";
-                const regionSlug  = isCoastal
-                  ? "coastal-republic"
-                  : isHighlands
-                  ? "data-highlands"
-                  : "logic-citadel";
-
-                return (
-                  <div
-                    key={quest.id}
-                    className="group rounded-xl p-5 cursor-pointer transition-all duration-200 hover:-translate-y-0.5"
-                    style={{
-                      background:   "#1E293B",
-                      border:       `1px solid #334155`,
-                      animation:    `fade-up ${0.3 + i * 0.06}s ease both`,
-                    }}
-                    onClick={() => setSelectedQuest(quest)}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.borderColor = `${col}55`;
-                      (e.currentTarget as HTMLElement).style.boxShadow   = `0 0 20px ${col}15`;
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.borderColor = "#334155";
-                      (e.currentTarget as HTMLElement).style.boxShadow   = "none";
-                    }}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1 min-w-0">
-                        <div
-                          className="font-semibold text-ghost-white mb-1 text-sm leading-snug"
-                          style={{ fontFamily: "var(--font-geist-mono)" }}
-                        >
-                          {quest.title}
-                        </div>
-                        <div className="text-xs text-text-secondary">
-                          Quest #{quest.order_index}
-                        </div>
-                      </div>
-                      <span className="text-lg ml-2">⏱️</span>
-                    </div>
-
-                    <div className="flex items-center justify-between mt-4">
-                      <NeonBadge color={col}>+{quest.exp_reward} EXP</NeonBadge>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          router.push(`/adventure/${regionSlug}/${quest.slug}`);
-                        }}
-                        className="px-3 py-1 rounded-lg text-xs font-bold transition-all"
-                        style={{
-                          background: col,
-                          color:      "#0F172A",
-                          border:     "none",
-                          cursor:     "pointer",
-                          fontFamily: "var(--font-geist-mono)",
-                        }}
-                      >
-                        Mulai →
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+            <Shimmer h={56} r={12} />
+          ) : stats && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 16,
+              background: "#111D35", border: "1px solid #1A2535",
+              borderRadius: 12, padding: "12px 18px", marginBottom: 20,
+              animation: "fade-up .5s ease both",
+            }}>
+              <div style={{
+                width: 44, height: 44, borderRadius: 10, flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: `${currentColor}12`, border: `1.5px solid ${currentColor}33`,
+                fontFamily: "var(--font-geist-mono)", fontSize: 18, fontWeight: 800, color: currentColor,
+              }}>
+                {stats.current_level}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, color: "#1E2D42" }}>
+                    Level {stats.current_level} → {stats.current_level + 1}
+                  </span>
+                  <span style={{ fontFamily: "var(--font-geist-mono)", fontSize: 11, fontWeight: 700, color: currentColor }}>
+                    {lvProgress?.percent ?? 0}%
+                  </span>
+                </div>
+                <XPBar current={lvProgress?.currentExp ?? 0} max={lvProgress?.neededExp ?? 500} color={currentColor} h={6} />
+              </div>
             </div>
           )}
+
+          <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
+            {(Object.entries(REGION_META) as [RegionKey, typeof REGION_META[RegionKey]][]).map(([key, meta]) => {
+              const active  = activeRegion === key;
+              const done    = doneCounts[key];
+              const total   = questsByRegion[key].length || 40;
+              const pct     = Math.round((done / total) * 100);
+              return (
+                <button
+                  key={key}
+                  onClick={() => { setActiveRegion(key); setSelectedQuest(null); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "10px 16px", borderRadius: 10,
+                    background: active ? `${meta.color}12` : "#111D35",
+                    border: `1px solid ${active ? meta.color + "44" : "#1A2535"}`,
+                    boxShadow: active ? `0 0 16px ${meta.color}18` : "none",
+                    cursor: "pointer", transition: "all .2s",
+                    minWidth: 190,
+                  }}
+                >
+                  <div style={{
+                    width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                    background: meta.color,
+                    boxShadow: active ? `0 0 6px ${meta.color}` : "none",
+                    opacity: active ? 1 : 0.4,
+                  }} />
+                  <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                    <p style={{
+                      fontFamily: "var(--font-geist-mono)", fontSize: 12, fontWeight: 700,
+                      color: active ? meta.color : "#475569",
+                      marginBottom: 2,
+                    }}>
+                      {meta.label}
+                    </p>
+                    <p style={{ fontSize: 10, color: "#1E2D42" }}>{meta.subtitle}</p>
+                    <div style={{ marginTop: 5, height: 2, background: "#1A2535", borderRadius: 99, overflow: "hidden", width: "100%" }}>
+                      <div style={{ height: "100%", width: `${pct}%`, background: meta.color, transition: "width .5s ease", borderRadius: 99 }} />
+                    </div>
+                  </div>
+                  <span style={{ fontFamily: "var(--font-geist-mono)", fontSize: 10, fontWeight: 700, color: active ? meta.color : "#1E2D42", flexShrink: 0 }}>
+                    {done}/{total}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 28px 48px", display: "flex", gap: 18, alignItems: "flex-start" }}>
+          <div style={{ flex: 1, minWidth: 0, background: "#0B1524", border: "1px solid #1A2535", borderRadius: 16, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px", borderBottom: "1px solid #1A2535" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: currentColor, boxShadow: `0 0 6px ${currentColor}` }} />
+                <span style={{ fontFamily: "var(--font-geist-mono)", fontSize: 13, fontWeight: 700, color: currentColor }}>
+                  {currentMeta.label}
+                </span>
+                <NeonBadge color={currentColor} sm>{currentMeta.subtitle}</NeonBadge>
+              </div>
+              <div style={{ display: "flex", gap: 14 }}>
+                {[
+                  { label: "Aktif",    fill: currentColor },
+                  { label: "Selesai",  fill: currentColor + "44" },
+                  { label: "Terkunci", fill: "#263348" },
+                ].map(l => (
+                  <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: l.fill }} />
+                    <span style={{ fontSize: 10, color: "#1E2D42" }}>{l.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ padding: "12px 16px" }}>
+              {loading ? (
+                <div style={{ padding: "80px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", border: `2px solid ${currentColor}33`, borderTopColor: currentColor, animation: "spin 1s linear infinite" }} />
+                  <span style={{ fontSize: 12, color: "#1E2D42" }}>Memuat peta...</span>
+                </div>
+              ) : currentQuests.length === 0 ? (
+                <div style={{ padding: "60px 0", textAlign: "center" }}>
+                  <p style={{ fontSize: 13, color: "#1E2D42" }}>Belum ada quest di region ini.</p>
+                </div>
+              ) : (
+                <RegionMap
+                  quests={currentQuests}
+                  color={currentColor}
+                  selectedId={selectedQuest?.id ?? null}
+                  onSelect={setSelectedQuest}
+                />
+              )}
+            </div>
+          </div>
+
+          <div style={{ width: 292, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+            {selectedQuest && (
+              <QuestPanel
+                quest={selectedQuest}
+                color={currentColor}
+                slug={REGION_META[regionOfQuest(selectedQuest.id)].slug}
+                onClose={() => setSelectedQuest(null)}
+              />
+            )}
+
+            <div style={{ background: "#0B1524", border: "1px solid #1A2535", borderRadius: 14, overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", borderBottom: "1px solid #1A2535" }}>
+                <span style={{ fontFamily: "var(--font-geist-mono)", fontSize: 12, fontWeight: 700, color: "#475569", letterSpacing: "0.08em" }}>
+                  QUEST AKTIF
+                </span>
+                {activeAll.length > 0 && (
+                  <NeonBadge color="#22D3EE" sm>{activeAll.length}</NeonBadge>
+                )}
+              </div>
+              <div style={{ padding: 10, display: "flex", flexDirection: "column", gap: 8, maxHeight: 380, overflowY: "auto" }}>
+                {loading ? (
+                  [1, 2, 3].map(i => <Shimmer key={i} h={80} r={10} />)
+                ) : activeAll.length === 0 ? (
+                  <div style={{ padding: "28px 0", textAlign: "center" }}>
+                    <p style={{ fontSize: 12, color: "#1E2D42" }}>Semua quest selesai.</p>
+                  </div>
+                ) : (
+                  activeAll.map(({ quest, region }) => (
+                    <ActiveQuestCard
+                      key={quest.id}
+                      quest={quest}
+                      color={REGION_META[region].color}
+                      regionSlug={REGION_META[region].slug}
+                      onFocus={() => { setActiveRegion(region); setSelectedQuest(quest); }}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+
+            {!loading && (
+              <div style={{ background: "#0B1524", border: "1px solid #1A2535", borderRadius: 14, padding: "14px 16px" }}>
+                <p style={{ fontFamily: "var(--font-geist-mono)", fontSize: 10, fontWeight: 700, color: "#1E2D42", letterSpacing: "0.12em", marginBottom: 14 }}>
+                  PROGRESS REGION
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {(Object.entries(REGION_META) as [RegionKey, typeof REGION_META[RegionKey]][]).map(([key, meta]) => {
+                    const done  = doneCounts[key];
+                    const total = questsByRegion[key].length || 40;
+                    return (
+                      <div key={key}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                          <span style={{ fontSize: 11, color: "#3D4F6A" }}>{meta.label}</span>
+                          <span style={{ fontFamily: "var(--font-geist-mono)", fontSize: 10, fontWeight: 700, color: meta.color }}>
+                            {done}/{total}
+                          </span>
+                        </div>
+                        <XPBar current={done} max={total} color={meta.color} h={4} />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       <style jsx>{`
-        @keyframes fade-up {
-          from { opacity: 0; transform: translateY(12px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes scale-in {
-          from { opacity: 0; transform: scale(0.97); }
-          to   { opacity: 1; transform: scale(1); }
-        }
-        @keyframes node-appear {
-          from { opacity: 0; transform: scale(0.5); }
-          to   { opacity: 1; transform: scale(1); }
-        }
+        @keyframes fade-up  { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slide-in { from { opacity: 0; transform: translateX(8px);  } to { opacity: 1; transform: translateX(0); } }
+        @keyframes node-pop { from { opacity: 0; transform: scale(.25); }      to { opacity: 1; transform: scale(1); } }
+        @keyframes ring-pulse { 0%, 100% { opacity: .18; transform: scale(1); } 50% { opacity: .06; transform: scale(1.28); } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
     </div>
   );
