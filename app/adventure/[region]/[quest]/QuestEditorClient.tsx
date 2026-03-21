@@ -1,8 +1,10 @@
 "use client";
+
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Lightbulb, Play, RotateCcw, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Lightbulb, Play, RotateCcw, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 
+/* ─── Types ── */
 interface Quest {
   id: string; slug: string; title: string;
   story_intro: string | null; instructions: string;
@@ -14,6 +16,7 @@ interface Quest {
   prerequisite_quest_id: string | null;
 }
 interface Region { slug: string; name: string; color: string; }
+interface NextQuest { slug: string; title: string; difficulty: string; exp_reward: number; }
 interface LastAttempt {
   submitted_code: string; status: string;
   exp_earned: number; socratic_feedback: string | null;
@@ -24,6 +27,7 @@ type FeedbackStatus = "syntax_error" | "logic_error" | "passed_dirty" | "passed_
 const DIFF_LABEL: Record<string, string> = { easy: "Mudah", normal: "Normal", hard: "Sulit", expert: "Expert" };
 const DIFF_COLOR: Record<string, string> = { easy: "#34D399", normal: "#22D3EE", hard: "#A78BFA", expert: "#F59E0B" };
 
+/* ─── NeonBadge ── */
 function NeonBadge({ children, color = "#22D3EE" }: { children: React.ReactNode; color?: string }) {
   return (
     <span style={{
@@ -37,12 +41,15 @@ function NeonBadge({ children, color = "#22D3EE" }: { children: React.ReactNode;
   );
 }
 
+/* ─── Simple Code Editor (textarea-based) ── */
 function CodeEditor({ value, onChange, language, disabled }: {
   value: string; onChange: (v: string) => void;
   language: string; disabled?: boolean;
 }) {
   const taRef   = useRef<HTMLTextAreaElement>(null);
   const lineRef = useRef<HTMLDivElement>(null);
+
+  /* sync scroll antara textarea dan line numbers */
   const syncScroll = useCallback(() => {
     if (taRef.current && lineRef.current) {
       lineRef.current.scrollTop = taRef.current.scrollTop;
@@ -51,6 +58,7 @@ function CodeEditor({ value, onChange, language, disabled }: {
 
   const lines = value.split("\n").length;
 
+  /* Tab key support */
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Tab") {
       e.preventDefault();
@@ -71,6 +79,7 @@ function CodeEditor({ value, onChange, language, disabled }: {
       background: "#070D1A", borderRadius: 10,
       border: "1px solid #1A2535", fontFamily: "var(--font-jetbrains-mono)",
     }}>
+      {/* Line numbers */}
       <div ref={lineRef} style={{
         width: 44, flexShrink: 0, overflowY: "hidden",
         background: "#080F1C", borderRight: "1px solid #1A2535",
@@ -87,6 +96,7 @@ function CodeEditor({ value, onChange, language, disabled }: {
         ))}
       </div>
 
+      {/* Code textarea */}
       <textarea
         ref={taRef}
         value={value}
@@ -111,6 +121,7 @@ function CodeEditor({ value, onChange, language, disabled }: {
   );
 }
 
+/* ─── Feedback panel ── */
 function FeedbackPanel({ status, text, expEarned, isRetry }: {
   status: FeedbackStatus; text: string; expEarned?: number; isRetry: boolean;
 }) {
@@ -125,6 +136,9 @@ function FeedbackPanel({ status, text, expEarned, isRetry }: {
 
   if (!cfg) return null;
 
+  // React requires capitalized variable to render dynamic component
+  const StatusIcon = cfg.Icon;
+
   return (
     <div style={{
       borderRadius: 10, overflow: "hidden",
@@ -134,7 +148,7 @@ function FeedbackPanel({ status, text, expEarned, isRetry }: {
       <div style={{ height: 2, background: cfg.color }} />
       <div style={{ padding: "12px 16px", background: `${cfg.color}08` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <cfg.Icon size={14} color={cfg.color} strokeWidth={2} />
+          <StatusIcon size={14} color={cfg.color} strokeWidth={2} />
           <span style={{ fontFamily: "var(--font-geist-mono)", fontSize: 12, fontWeight: 700, color: cfg.color }}>
             {cfg.label}
           </span>
@@ -152,9 +166,11 @@ function FeedbackPanel({ status, text, expEarned, isRetry }: {
   );
 }
 
-export default function QuestEditorClient({ quest, region, lastAttempt, isFirstPass, userId }: {
+/* ─── Main Editor Client ── */
+export default function QuestEditorClient({ quest, region, lastAttempt, isFirstPass, userId, nextQuest }: {
   quest: Quest; region: Region; lastAttempt: LastAttempt | null;
   isFirstPass: boolean; userId: string;
+  nextQuest: NextQuest | null;
 }) {
   const router = useRouter();
 
@@ -168,6 +184,37 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
   const [output,       setOutput]       = useState<string | null>(null);
   const isRetry = !isFirstPass;
 
+  /* ── Submit quest ── */
+  /* ── Jalankan kode JavaScript di client (browser sandbox) ── */
+  /* ── Deteksi apakah kode adalah HTML ── */
+  const isHTMLCode = (src: string) => {
+    const trimmed = src.trim().toLowerCase();
+    return trimmed.startsWith("<!doctype") || trimmed.startsWith("<html") || trimmed.startsWith("<head") || trimmed.startsWith("<body");
+  };
+
+  /* ── Normalize HTML untuk comparison (hapus whitespace antar tag) ── */
+  const normalizeHTML = (src: string) =>
+    src.trim().replace(/\s+/g, " ").replace(/> </g, "><").replace(/\n/g, "").replace(/  +/g, " ");
+
+  /* ── Jalankan JavaScript di browser ── */
+  const runJavaScript = (src: string): { output: string; hadSyntaxError: boolean } => {
+    const logs: string[] = [];
+    const fakeConsole = {
+      log:   (...a: unknown[]) => logs.push(a.map(String).join(" ")),
+      error: (...a: unknown[]) => logs.push(a.map(String).join(" ")),
+      warn:  (...a: unknown[]) => logs.push(a.map(String).join(" ")),
+    };
+    try {
+      // eslint-disable-next-line no-new-func
+      const fn = new Function("console", src);
+      fn(fakeConsole);
+      return { output: logs.join("\n"), hadSyntaxError: false };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { output: msg, hadSyntaxError: true };
+    }
+  };
+
   const handleSubmit = async () => {
     if (submitting || !code.trim()) return;
     setSubmitting(true);
@@ -176,7 +223,25 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
 
     const durationSec = Math.round((Date.now() - startTime) / 1000);
 
+    /* ── 1. Eksekusi / evaluate kode di client ── */
+    let actualOutput    = "";
+    let hadSyntaxError  = false;
+
+    if (isHTMLCode(code)) {
+      // HTML: tidak dieksekusi — kirim kode mentah ke server, server yang normalize & compare
+      actualOutput   = code;
+      hadSyntaxError = false;
+      setOutput(null);
+    } else if (quest.language === "javascript") {
+      const result   = runJavaScript(code);
+      actualOutput   = result.output;
+      hadSyntaxError = result.hadSyntaxError;
+      setOutput(actualOutput || null);
+    }
+    // Python: output kosong, server handle
+
     try {
+      /* ── 2. Kirim hasil ke server untuk disimpan & dinilai ── */
       const res  = await fetch("/api/quests/submit", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -187,6 +252,8 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
           duration_sec:     durationSec,
           language:         quest.language,
           expected_output:  quest.expected_output,
+          actual_output:    actualOutput,
+          had_syntax_error: hadSyntaxError,
           test_cases:       quest.test_cases,
         }),
       });
@@ -197,7 +264,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
         return;
       }
 
-      setOutput(data.data?.execution_output ?? null);
       setFeedback({
         status: data.data?.status as FeedbackStatus,
         text:   data.data?.socratic_feedback ?? "",
@@ -207,13 +273,15 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
       if (data.data?.status === "passed_clean" || data.data?.status === "passed_dirty") {
         setTimeout(() => router.refresh(), 1500);
       }
-    } catch {
+    } catch (e) {
+      console.error("submit error:", e);
       setFeedback({ status: "syntax_error", text: "Koneksi gagal. Coba lagi.", exp: 0 });
     } finally {
       setSubmitting(false);
     }
   };
 
+  /* ── Request hint ── */
   const handleHint = () => {
     const hint = quest.hints[hintsUsed];
     if (!hint) return;
@@ -228,6 +296,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
   return (
     <div style={{ minHeight: "100vh", background: "#0A1220", color: "#F8FAFC", display: "flex", flexDirection: "column" }}>
 
+      {/* ── Top bar ── */}
       <div style={{
         height: 52, flexShrink: 0,
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -236,6 +305,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
         backdropFilter: "blur(16px)",
         borderBottom: "1px solid #1A2535",
       }}>
+        {/* Left: back + breadcrumb */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button onClick={() => router.push("/adventure")} style={{
             display: "flex", alignItems: "center", gap: 6,
@@ -269,6 +339,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
           )}
         </div>
 
+        {/* Right: badges + actions */}
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <NeonBadge color={DIFF_COLOR[quest.difficulty] ?? "#94A3B8"}>
             {DIFF_LABEL[quest.difficulty] ?? quest.difficulty}
@@ -283,12 +354,16 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
         </div>
       </div>
 
+      {/* ── Body: 2 panel ── */}
       <div style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
+
+        {/* Left: instruksi */}
         <div style={{
           width: 380, flexShrink: 0, display: "flex", flexDirection: "column",
           borderRight: "1px solid #1A2535", overflowY: "auto",
           background: "#090F1D",
         }}>
+          {/* Story intro */}
           {quest.story_intro && (
             <div style={{
               margin: "16px 16px 0", padding: "12px 14px", borderRadius: 10,
@@ -300,6 +375,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
             </div>
           )}
 
+          {/* Instructions */}
           <div style={{ padding: "16px 16px 0" }}>
             <p style={{ fontSize: 10, color: "#334155", fontFamily: "var(--font-geist-mono)", letterSpacing: "0.1em", marginBottom: 10 }}>
               INSTRUKSI
@@ -309,6 +385,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
             </div>
           </div>
 
+          {/* Expected output */}
           {quest.expected_output && (
             <div style={{ padding: "16px 16px 0" }}>
               <p style={{ fontSize: 10, color: "#334155", fontFamily: "var(--font-geist-mono)", letterSpacing: "0.1em", marginBottom: 8 }}>
@@ -325,6 +402,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
             </div>
           )}
 
+          {/* EXP info */}
           <div style={{ padding: "14px 16px 0" }}>
             <div style={{ padding: "10px 12px", borderRadius: 9, background: "#0B1524", border: "1px solid #1A2535" }}>
               {isRetry ? (
@@ -342,6 +420,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
             </div>
           </div>
 
+          {/* Hint yang sedang tampil */}
           {hintVisible && (
             <div style={{ padding: "14px 16px 0" }}>
               <div style={{
@@ -358,10 +437,15 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
               </div>
             </div>
           )}
+
+          {/* Spacer */}
           <div style={{ flex: 1, minHeight: 20 }} />
         </div>
 
+        {/* Right: editor + output */}
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+          {/* Editor area */}
           <div style={{ flex: 1, minHeight: 0, padding: "12px 12px 0", display: "flex", flexDirection: "column", gap: 8 }}>
             <CodeEditor
               value={code}
@@ -371,7 +455,10 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
             />
           </div>
 
+          {/* Bottom: output + feedback + actions */}
           <div style={{ padding: "10px 12px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+
+            {/* Execution output */}
             {output !== null && (
               <div style={{
                 padding: "10px 12px", borderRadius: 9,
@@ -386,6 +473,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
               </div>
             )}
 
+            {/* Feedback panel */}
             {feedback && (
               <FeedbackPanel
                 status={feedback.status}
@@ -395,70 +483,169 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
               />
             )}
 
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button onClick={() => { setCode(quest.starter_code ?? ""); setFeedback(null); setOutput(null); }}
-                title="Reset ke kode awal"
-                style={{
-                  width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  border: "1px solid #1A2535", background: "none",
-                  color: "#334155", cursor: "pointer", transition: "all .2s",
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#334155"; (e.currentTarget as HTMLElement).style.color = "#64748B"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#1A2535"; (e.currentTarget as HTMLElement).style.color = "#334155"; }}
-              >
-                <RotateCcw size={13} strokeWidth={2} />
-              </button>
+            {/* ── Passed + ada next quest: banner celebration ── */}
+            {passed && nextQuest ? (
+              <div style={{
+                borderRadius: 12, overflow: "hidden",
+                border: `1px solid ${regionColor}33`,
+                animation: "feedback-up .3s ease",
+              }}>
+                {/* Top shimmer line */}
+                <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${regionColor}, transparent)` }} />
 
-              <button
-                onClick={handleHint}
-                disabled={hintsLeft === 0}
-                style={{
-                  display: "flex", alignItems: "center", gap: 5,
-                  padding: "0 14px", height: 36, borderRadius: 8, flexShrink: 0,
-                  border: "1px solid #FBBF2433", background: "none",
-                  color: hintsLeft > 0 ? "#FBBF24" : "#263348",
-                  cursor: hintsLeft > 0 ? "pointer" : "not-allowed",
-                  fontSize: 12, fontFamily: "var(--font-inter)", transition: "all .2s",
-                }}
-                onMouseEnter={e => { if (hintsLeft > 0) (e.currentTarget as HTMLElement).style.background = "#FBBF2410"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "none"; }}
-              >
-                <Lightbulb size={13} strokeWidth={1.75} />
-                Hint ({hintsLeft})
-              </button>
+                <div style={{
+                  padding: "14px 16px",
+                  background: `linear-gradient(135deg, ${regionColor}10 0%, ${regionColor}06 100%)`,
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
+                }}>
+                  {/* Left: info quest berikutnya */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{
+                      fontSize: 10, color: `${regionColor}88`,
+                      fontFamily: "var(--font-geist-mono)", letterSpacing: "0.1em",
+                      marginBottom: 4,
+                    }}>
+                      QUEST #{quest.order_index + 1} BERIKUTNYA
+                    </p>
+                    <p style={{
+                      fontFamily: "var(--font-geist-mono)", fontSize: 15, fontWeight: 700,
+                      color: "#F1F5F9", marginBottom: 4,
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}>
+                      {nextQuest.title}
+                    </p>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{
+                        padding: "1px 8px", borderRadius: 99,
+                        border: `1px solid ${DIFF_COLOR[nextQuest.difficulty] ?? "#94A3B8"}44`,
+                        background: `${DIFF_COLOR[nextQuest.difficulty] ?? "#94A3B8"}12`,
+                        color: DIFF_COLOR[nextQuest.difficulty] ?? "#94A3B8",
+                        fontSize: 10, fontFamily: "var(--font-geist-mono)", fontWeight: 700,
+                      }}>
+                        {DIFF_LABEL[nextQuest.difficulty] ?? nextQuest.difficulty}
+                      </span>
+                      <span style={{ fontSize: 10, color: "#34D399", fontFamily: "var(--font-geist-mono)", fontWeight: 700 }}>
+                        +{nextQuest.exp_reward} EXP
+                      </span>
+                    </div>
+                  </div>
 
-              <button
-                onClick={handleSubmit}
-                disabled={submitting || !code.trim()}
-                style={{
-                  flex: 1, height: 36, borderRadius: 8,
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-                  border: "none", cursor: submitting || !code.trim() ? "not-allowed" : "pointer",
-                  background: submitting || !code.trim()
-                    ? "#1A2535"
-                    : passed
-                    ? "#34D399"
-                    : regionColor,
-                  color: submitting || !code.trim() ? "#334155" : "#080E1A",
-                  fontFamily: "var(--font-geist-mono)", fontSize: 13, fontWeight: 700,
-                  boxShadow: !submitting && !passed && code.trim() ? `0 0 16px ${regionColor}33` : "none",
-                  transition: "all .2s",
-                  opacity: submitting ? 0.7 : 1,
-                }}
-              >
-                {submitting ? (
-                  <>
-                    <div style={{ width: 13, height: 13, borderRadius: "50%", border: "2px solid #33415533", borderTopColor: "#64748B", animation: "spin 1s linear infinite" }} />
-                    Memvalidasi...
-                  </>
-                ) : passed ? (
-                  <><CheckCircle size={14} strokeWidth={2} /> Selesai — Kirim Ulang</>
-                ) : (
-                  <><Play size={13} strokeWidth={2.5} fill="currentColor" /> Submit Quest</>
-                )}
-              </button>
-            </div>
+                  {/* Right: tombol */}
+                  <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
+                    {/* Coba lagi */}
+                    <button
+                      onClick={handleSubmit}
+                      disabled={submitting}
+                      title="Submit ulang"
+                      style={{
+                        width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        border: "1px solid #1E2D3D", background: "none",
+                        color: "#334155", cursor: "pointer", transition: "all .2s",
+                      }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#334155"; (e.currentTarget as HTMLElement).style.color = "#64748B"; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#1E2D3D"; (e.currentTarget as HTMLElement).style.color = "#334155"; }}
+                    >
+                      <RotateCcw size={13} strokeWidth={2} />
+                    </button>
+
+                    {/* Next quest */}
+                    <button
+                      onClick={() => router.push(`/adventure/${region.slug}/${nextQuest.slug}`)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        padding: "0 20px", height: 40, borderRadius: 9,
+                        border: "none", cursor: "pointer",
+                        background: regionColor,
+                        color: "#080E1A",
+                        fontFamily: "var(--font-geist-mono)", fontSize: 13, fontWeight: 700,
+                        letterSpacing: "0.02em",
+                        boxShadow: `0 4px 20px ${regionColor}44, inset 0 1px 0 rgba(255,255,255,0.15)`,
+                        transition: "all .2s",
+                      }}
+                      onMouseEnter={e => {
+                        (e.currentTarget as HTMLElement).style.boxShadow = `0 6px 28px ${regionColor}66, inset 0 1px 0 rgba(255,255,255,0.2)`;
+                        (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)";
+                      }}
+                      onMouseLeave={e => {
+                        (e.currentTarget as HTMLElement).style.boxShadow = `0 4px 20px ${regionColor}44, inset 0 1px 0 rgba(255,255,255,0.15)`;
+                        (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
+                      }}
+                    >
+                      Lanjut
+                      <ArrowRight size={14} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* ── Action row normal ── */
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {/* Reset code */}
+                <button onClick={() => { setCode(quest.starter_code ?? ""); setFeedback(null); setOutput(null); }}
+                  title="Reset ke kode awal"
+                  style={{
+                    width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    border: "1px solid #1A2535", background: "none",
+                    color: "#334155", cursor: "pointer", transition: "all .2s",
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#334155"; (e.currentTarget as HTMLElement).style.color = "#64748B"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#1A2535"; (e.currentTarget as HTMLElement).style.color = "#334155"; }}
+                >
+                  <RotateCcw size={13} strokeWidth={2} />
+                </button>
+
+                {/* Hint */}
+                <button
+                  onClick={handleHint}
+                  disabled={hintsLeft === 0}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 5,
+                    padding: "0 14px", height: 36, borderRadius: 8, flexShrink: 0,
+                    border: "1px solid #FBBF2433", background: "none",
+                    color: hintsLeft > 0 ? "#FBBF24" : "#263348",
+                    cursor: hintsLeft > 0 ? "pointer" : "not-allowed",
+                    fontSize: 12, fontFamily: "var(--font-inter)", transition: "all .2s",
+                  }}
+                  onMouseEnter={e => { if (hintsLeft > 0) (e.currentTarget as HTMLElement).style.background = "#FBBF2410"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "none"; }}
+                >
+                  <Lightbulb size={13} strokeWidth={1.75} />
+                  Hint ({hintsLeft})
+                </button>
+
+                {/* Submit */}
+                <button
+                  onClick={handleSubmit}
+                  disabled={submitting || !code.trim()}
+                  style={{
+                    flex: 1, height: 36, borderRadius: 8,
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                    border: "none", cursor: submitting || !code.trim() ? "not-allowed" : "pointer",
+                    background: submitting || !code.trim()
+                      ? "#1A2535"
+                      : passed ? "#34D399" : regionColor,
+                    color: submitting || !code.trim() ? "#334155" : "#080E1A",
+                    fontFamily: "var(--font-geist-mono)", fontSize: 13, fontWeight: 700,
+                    boxShadow: !submitting && !passed && code.trim() ? `0 0 16px ${regionColor}33` : "none",
+                    transition: "all .2s",
+                    opacity: submitting ? 0.7 : 1,
+                  }}
+                >
+                  {submitting ? (
+                    <>
+                      <div style={{ width: 13, height: 13, borderRadius: "50%", border: "2px solid #33415533", borderTopColor: "#64748B", animation: "spin 1s linear infinite" }} />
+                      Memvalidasi...
+                    </>
+                  ) : passed ? (
+                    <><CheckCircle size={14} strokeWidth={2} /> Selesai!</>
+                  ) : (
+                    <><Play size={13} strokeWidth={2.5} fill="currentColor" /> Submit Quest</>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
