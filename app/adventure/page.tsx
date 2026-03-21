@@ -8,12 +8,10 @@ import { formatExp } from "@/lib/utils/format";
 import Navbar from "@/components/navigation/Navbar";
 import type { QuestMapData } from "@/types";
 
-/* ─── Types ──────────────────────────────────────────────────────────────── */
 interface UserStats  { current_level: number; total_exp: number; weekly_exp: number; current_streak: number; }
 interface Profile    { username: string; display_name: string; avatar_url: string | null; hero_class: string | null; }
 type RegionKey = "coastal" | "highlands" | "citadel";
 
-/* ─── Constants ──────────────────────────────────────────────────────────── */
 const REGION_META: Record<RegionKey, { label: string; color: string; slug: string; subtitle: string }> = {
   coastal:   { label: "Coastal Republic", color: "#22D3EE", slug: "coastal-republic", subtitle: "Web Development"       },
   highlands: { label: "Data Highlands",   color: "#A78BFA", slug: "data-highlands",   subtitle: "Machine Learning & AI" },
@@ -22,7 +20,6 @@ const REGION_META: Record<RegionKey, { label: string; color: string; slug: strin
 const DIFF_COLOR: Record<string, string> = { easy: "#34D399", normal: "#22D3EE", hard: "#A78BFA", expert: "#F59E0B" };
 const DIFF_LABEL: Record<string, string> = { easy: "Mudah", normal: "Normal", hard: "Sulit", expert: "Expert" };
 
-/* ─── Shared UI ──────────────────────────────────────────────────────────── */
 function NeonBadge({ children, color = "#22D3EE", sm }: { children: React.ReactNode; color?: string; sm?: boolean }) {
   return (
     <span style={{
@@ -51,13 +48,11 @@ function Shimmer({ h, r = 8 }: { h: number; r?: number }) {
   return <div className="shimmer" style={{ height: h, borderRadius: r }} />;
 }
 
-/* ─── Map layout ────────────────────────────────────────────────────────── */
 const M_COLS  = 6;
-const M_GAP_X = 140;  // jarak horizontal antar node
-const M_GAP_Y = 130;  // jarak vertikal antar baris — lebih tinggi
+const M_GAP_X = 140;
+const M_GAP_Y = 130;
 const M_PAD_X = 60;
 const M_PAD_Y = 60;
-// Zigzag: naik-turun per kolom, total range 50px
 const M_YOFF  = [0, -25, 15, -15, 25, 0];
 
 function getPos(i: number) {
@@ -78,12 +73,10 @@ function getMapSize(count: number) {
   };
 }
 
-// Garis lurus — polyline points string
 function makePolyline(pts: { x: number; y: number }[]): string {
   return pts.map(p => `${p.x},${p.y}`).join(" ");
 }
 
-/* ─── Region Map — path SVG + node HTML div ──────────────────────────────── */
 function RegionMap({ quests, color, selectedId, onSelect }: {
   quests: QuestMapData[]; color: string;
   selectedId: string | null; onSelect: (q: QuestMapData | null) => void;
@@ -98,10 +91,7 @@ function RegionMap({ quests, color, selectedId, onSelect }: {
 
   return (
     <div style={{ overflowX: "auto", overflowY: "auto" }}>
-      {/* Container dengan ukuran pasti */}
       <div style={{ position: "relative", width: w, height: h, minWidth: w }}>
-
-        {/* Layer 1: SVG path di bawah */}
         <svg width={w} height={h}
           style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
           <defs>
@@ -114,17 +104,13 @@ function RegionMap({ quests, color, selectedId, onSelect }: {
             </filter>
           </defs>
 
-          {/* Background dot grid */}
           <rect width={w} height={h} fill={`url(#dotbg-${color.replace("#","")})`}/>
-
-          {/* Full path dim — garis lurus */}
           {fullPoints && (
             <polyline points={fullPoints} fill="none"
               stroke={`${color}1a`} strokeWidth="3"
               strokeLinecap="round" strokeLinejoin="round"/>
           )}
 
-          {/* Done path neon — garis lurus */}
           {donePoints && <>
             <polyline points={donePoints} fill="none"
               stroke={color} strokeWidth="12"
@@ -140,7 +126,6 @@ function RegionMap({ quests, color, selectedId, onSelect }: {
           </>}
         </svg>
 
-        {/* Layer 2: Node HTML div di atas — TIDAK bisa di-clip */}
         {quests.map((q, i) => {
           const pos    = allPos[i];
           const done   = q.status === "done";
@@ -169,13 +154,11 @@ function RegionMap({ quests, color, selectedId, onSelect }: {
                 animation: `node-pop .45s ${Math.min(i * 0.03, 1.2)}s both`,
                 zIndex: active ? 3 : done ? 2 : 1,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                // background
                 background: done
                   ? `radial-gradient(circle, ${color}3a 0%, ${color}18 100%)`
                   : active
                   ? `radial-gradient(circle, ${color}22 0%, ${color}0a 100%)`
                   : "#0A1628",
-                // border
                 border: locked
                   ? "1px dashed #1E293B"
                   : done
@@ -195,7 +178,6 @@ function RegionMap({ quests, color, selectedId, onSelect }: {
                 transform: lit && !locked ? "scale(1.12)" : "scale(1)",
               }}
             >
-              {/* Inner icon */}
               {done && (
                 <svg width={SIZE} height={SIZE} style={{ position: "absolute" }}>
                   <path d={`M ${SIZE*0.28} ${SIZE*0.52} L ${SIZE*0.44} ${SIZE*0.68} L ${SIZE*0.72} ${SIZE*0.34}`}
@@ -219,7 +201,6 @@ function RegionMap({ quests, color, selectedId, onSelect }: {
                 </svg>
               )}
 
-              {/* Pulse ring active */}
               {active && (
                 <div style={{
                   position: "absolute",
@@ -232,7 +213,6 @@ function RegionMap({ quests, color, selectedId, onSelect }: {
                 }}/>
               )}
 
-              {/* Nomor quest — di bawah div, absolute */}
               <div style={{
                 position: "absolute",
                 top: SIZE + 4,
@@ -248,7 +228,6 @@ function RegionMap({ quests, color, selectedId, onSelect }: {
                 {q.order_index}
               </div>
 
-              {/* Tooltip */}
               {lit && (
                 <div style={{
                   position: "absolute",
@@ -279,7 +258,6 @@ function RegionMap({ quests, color, selectedId, onSelect }: {
   );
 }
 
-/* ─── Quest Panel (sidebar detail) ──────────────────────────────────────── */
 function QuestPanel({ quest, color, slug, onClose }: {
   quest: QuestMapData; color: string; slug: string; onClose: () => void;
 }) {
@@ -327,7 +305,6 @@ function QuestPanel({ quest, color, slug, onClose }: {
   );
 }
 
-/* ─── Active Quest Card ──────────────────────────────────────────────────── */
 function ActiveQuestCard({ quest, color, regionSlug, onFocus }: {
   quest: QuestMapData; color: string; regionSlug: string; onFocus: () => void;
 }) {
@@ -358,7 +335,6 @@ function ActiveQuestCard({ quest, color, regionSlug, onFocus }: {
   );
 }
 
-/* ─── Main Page ──────────────────────────────────────────────────────────── */
 export default function AdventurePage() {
   const router       = useRouter();
   const searchParams = useSearchParams();
@@ -397,7 +373,6 @@ export default function AdventurePage() {
       setProfile(profRes.data);
       setStats(statsRes.data);
 
-      // Kumpulkan semua quest_id yang sudah passed (dari semua attempt)
       const completedIds = new Set(
         (attRes.data ?? [])
           .filter(a => a.status === "passed_clean" || a.status === "passed_dirty")
@@ -415,7 +390,6 @@ export default function AdventurePage() {
 
         return qs.map((q, i) => {
           const done = completedIds.has(q.id);
-          // Quest aktif = belum done, tapi quest sebelumnya (atau ini index 0) sudah done / active
           const prevDone = i === 0 || completedIds.has(qs[i - 1].id);
           const status: "done" | "active" | "locked" = done
             ? "done"
@@ -447,7 +421,6 @@ export default function AdventurePage() {
     load();
   }, [router]);
 
-  /* ── Derived ── */
   const lvProgress = stats ? getLevelProgress(stats.total_exp) : null;
   const questsByRegion: Record<RegionKey, QuestMapData[]> = {
     coastal: coastalQuests, highlands: highlandsQuests, citadel: citadelQuests,
@@ -481,7 +454,6 @@ export default function AdventurePage() {
         currentLevel={stats?.current_level}
       />
 
-      {/* Toast */}
       {notice && (
         <div style={{
           position: "fixed", top: 68, left: "50%", transform: "translateX(-50%)", zIndex: 50,
@@ -494,8 +466,6 @@ export default function AdventurePage() {
 
       <div style={{ paddingTop: 60 }}>
         <div style={{ maxWidth: 1400, margin: "0 auto", padding: "24px 24px 0" }}>
-
-          {/* ── Header ── */}
           <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18 }}>
             <div style={{ animation: "fade-up .4s ease both" }}>
               <h1 style={{ fontFamily: "var(--font-geist-mono)", fontSize: 22, fontWeight: 800, color: "#F1F5F9", marginBottom: 2 }}>
@@ -521,7 +491,6 @@ export default function AdventurePage() {
             )}
           </div>
 
-          {/* ── Level bar ── */}
           {loading ? <Shimmer h={52} r={12} /> : stats && (
             <div style={{
               display: "flex", alignItems: "center", gap: 14,
@@ -544,7 +513,6 @@ export default function AdventurePage() {
             </div>
           )}
 
-          {/* ── Region tabs ── */}
           <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
             {(Object.entries(REGION_META) as [RegionKey, typeof REGION_META[RegionKey]][]).map(([key, meta]) => {
               const active = activeRegion === key;
@@ -583,12 +551,8 @@ export default function AdventurePage() {
           </div>
         </div>
 
-        {/* ── Map + Sidebar ── */}
         <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 24px 48px", display: "flex", gap: 16, alignItems: "flex-start" }}>
-
-          {/* Map panel */}
           <div style={{ flex: 1, minWidth: 0, background: "#080F1C", border: "1px solid #1A2535", borderRadius: 16 }}>
-            {/* Map header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 16px", borderBottom: "1px solid #1A2535" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ width: 7, height: 7, borderRadius: "50%", background: currentColor, boxShadow: `0 0 5px ${currentColor}` }} />
@@ -609,7 +573,6 @@ export default function AdventurePage() {
               </div>
             </div>
 
-            {/* Map body */}
             <div>
               {loading ? (
                 <div style={{ padding: "70px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
@@ -631,10 +594,7 @@ export default function AdventurePage() {
             </div>
           </div>
 
-          {/* Sidebar */}
           <div style={{ width: 284, flexShrink: 0, display: "flex", flexDirection: "column", gap: 12 }}>
-
-            {/* Quest detail */}
             {selectedQuest && (
               <QuestPanel
                 quest={selectedQuest}
@@ -644,7 +604,6 @@ export default function AdventurePage() {
               />
             )}
 
-            {/* Active quests */}
             <div style={{ background: "#080F1C", border: "1px solid #1A2535", borderRadius: 14, overflow: "hidden" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 13px", borderBottom: "1px solid #1A2535" }}>
                 <span style={{ fontFamily: "var(--font-geist-mono)", fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "0.08em" }}>QUEST AKTIF</span>
@@ -668,7 +627,6 @@ export default function AdventurePage() {
               </div>
             </div>
 
-            {/* Progress summary */}
             {!loading && (
               <div style={{ background: "#080F1C", border: "1px solid #1A2535", borderRadius: 14, padding: "13px 14px" }}>
                 <p style={{ fontFamily: "var(--font-geist-mono)", fontSize: 10, fontWeight: 700, color: "#334155", letterSpacing: "0.12em", marginBottom: 12 }}>

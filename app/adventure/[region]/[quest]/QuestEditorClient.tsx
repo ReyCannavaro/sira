@@ -22,6 +22,7 @@ interface LastAttempt {
 }
 
 type FeedbackStatus = "syntax_error" | "logic_error" | "passed_dirty" | "passed_clean" | null;
+
 const DIFF_LABEL: Record<string, string> = { easy: "Mudah", normal: "Normal", hard: "Sulit", expert: "Expert" };
 const DIFF_COLOR: Record<string, string> = { easy: "#34D399", normal: "#22D3EE", hard: "#A78BFA", expert: "#F59E0B" };
 
@@ -44,12 +45,15 @@ function CodeEditor({ value, onChange, language, disabled }: {
 }) {
   const taRef   = useRef<HTMLTextAreaElement>(null);
   const lineRef = useRef<HTMLDivElement>(null);
+
   const syncScroll = useCallback(() => {
     if (taRef.current && lineRef.current) {
       lineRef.current.scrollTop = taRef.current.scrollTop;
     }
   }, []);
+
   const lines = value.split("\n").length;
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Tab") {
       e.preventDefault();
@@ -168,13 +172,17 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
   const [hintVisible,  setHintVisible]  = useState<string | null>(null);
   const [startTime]                     = useState(Date.now());
   const [output,       setOutput]       = useState<string | null>(null);
+  const [expPopup,     setExpPopup]     = useState<{ exp: number; streak: number; leveledUp: boolean; newLevel: number } | null>(null);
   const isRetry = !isFirstPass;
+
   const isHTMLCode = (src: string) => {
     const trimmed = src.trim().toLowerCase();
     return trimmed.startsWith("<!doctype") || trimmed.startsWith("<html") || trimmed.startsWith("<head") || trimmed.startsWith("<body");
   };
+
   const normalizeHTML = (src: string) =>
     src.trim().replace(/\s+/g, " ").replace(/> </g, "><").replace(/\n/g, "").replace(/  +/g, " ");
+
   const runJavaScript = (src: string): { output: string; hadSyntaxError: boolean } => {
     const logs: string[] = [];
     const fakeConsole = {
@@ -199,8 +207,10 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
     setOutput(null);
 
     const durationSec = Math.round((Date.now() - startTime) / 1000);
+
     let actualOutput    = "";
     let hadSyntaxError  = false;
+
     if (isHTMLCode(code)) {
       actualOutput   = code;
       hadSyntaxError = false;
@@ -234,14 +244,26 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
         return;
       }
 
+      const d = data.data;
       setFeedback({
-        status: data.data?.status as FeedbackStatus,
-        text:   data.data?.socratic_feedback ?? "",
-        exp:    data.data?.exp_earned ?? 0,
+        status: d?.status as FeedbackStatus,
+        text:   d?.socratic_feedback ?? "",
+        exp:    d?.exp_earned ?? 0,
       });
 
-      if (data.data?.status === "passed_clean" || data.data?.status === "passed_dirty") {
-        setTimeout(() => router.refresh(), 1500);
+      const passed = d?.status === "passed_clean" || d?.status === "passed_dirty";
+      if (passed && (d?.exp_earned ?? 0) > 0) {
+        setExpPopup({
+          exp:       d?.exp_earned ?? 0,
+          streak:    d?.current_streak ?? 0,
+          leveledUp: d?.leveled_up ?? false,
+          newLevel:  d?.new_level ?? 1,
+        });
+        setTimeout(() => setExpPopup(null), 4000);
+      }
+
+      if (passed) {
+        setTimeout(() => router.refresh(), 2000);
       }
     } catch (e) {
       console.error("submit error:", e);
@@ -251,6 +273,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
     }
   };
 
+  /* ── Request hint ── */
   const handleHint = () => {
     const hint = quest.hints[hintsUsed];
     if (!hint) return;
@@ -264,6 +287,66 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
 
   return (
     <div style={{ minHeight: "100vh", background: "#0A1220", color: "#F8FAFC", display: "flex", flexDirection: "column" }}>
+
+      {expPopup && (
+        <div style={{
+          position: "fixed", top: 72, right: 24, zIndex: 100,
+          display: "flex", flexDirection: "column", gap: 10,
+          animation: "exp-slide-in .35s cubic-bezier(.16,1,.3,1)",
+          pointerEvents: "none",
+        }}>
+          {expPopup.leveledUp && (
+            <div style={{
+              padding: "14px 22px", borderRadius: 14,
+              background: "linear-gradient(135deg, rgba(34,211,238,0.15), rgba(167,139,250,0.12))",
+              border: "1px solid rgba(34,211,238,0.4)",
+              boxShadow: "0 8px 32px rgba(34,211,238,0.2)",
+              textAlign: "center",
+            }}>
+              <p style={{ fontFamily: "var(--font-geist-mono)", fontSize: 11, color: "#22D3EE", letterSpacing: "0.12em", marginBottom: 4 }}>
+                LEVEL UP!
+              </p>
+              <p style={{ fontFamily: "var(--font-geist-mono)", fontSize: 28, fontWeight: 800, color: "#F1F5F9", lineHeight: 1 }}>
+                Level {expPopup.newLevel}
+              </p>
+            </div>
+          )}
+
+          <div style={{
+            padding: "12px 18px", borderRadius: 12,
+            background: "rgba(8,14,26,0.95)",
+            border: "1px solid #1A2535",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+            display: "flex", flexDirection: "column", gap: 6,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                background: "rgba(52,211,153,0.15)", border: "1.5px solid #34D399",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 16,
+              }}>⚡</div>
+              <div>
+                <p style={{ fontSize: 10, color: "#475569", marginBottom: 1 }}>EXP DIPEROLEH</p>
+                <p style={{ fontFamily: "var(--font-geist-mono)", fontSize: 22, fontWeight: 800, color: "#34D399", lineHeight: 1 }}>
+                  +{expPopup.exp}
+                </p>
+              </div>
+            </div>
+            {expPopup.streak > 1 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, paddingTop: 6, borderTop: "1px solid #1A2535" }}>
+                <div style={{ fontSize: 14 }}>🔥</div>
+                <div>
+                  <span style={{ fontSize: 11, color: "#F59E0B", fontFamily: "var(--font-geist-mono)", fontWeight: 700 }}>
+                    {expPopup.streak} hari berturut-turut!
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div style={{
         height: 52, flexShrink: 0,
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -318,8 +401,8 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
           </NeonBadge>
         </div>
       </div>
-
       <div style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
+
         <div style={{
           width: 380, flexShrink: 0, display: "flex", flexDirection: "column",
           borderRight: "1px solid #1A2535", overflowY: "auto",
@@ -438,6 +521,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
                 animation: "feedback-up .3s ease",
               }}>
                 <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${regionColor}, transparent)` }} />
+
                 <div style={{
                   padding: "14px 16px",
                   background: `linear-gradient(135deg, ${regionColor}10 0%, ${regionColor}06 100%)`,
@@ -521,7 +605,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
               </div>
             ) : (
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                {/* Reset code */}
                 <button onClick={() => { setCode(quest.starter_code ?? ""); setFeedback(null); setOutput(null); }}
                   title="Reset ke kode awal"
                   style={{
@@ -596,6 +679,10 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
         @keyframes spin {
           from { transform: rotate(0deg); }
           to   { transform: rotate(360deg); }
+        }
+        @keyframes exp-slide-in {
+          from { opacity: 0; transform: translateX(24px) scale(0.95); }
+          to   { opacity: 1; transform: translateX(0)   scale(1);    }
         }
       `}</style>
     </div>
