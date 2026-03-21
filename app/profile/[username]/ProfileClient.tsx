@@ -146,12 +146,24 @@ function BadgeCard({ ub }: { ub: UserBadge }) {
         transition: 'all .18s', cursor: 'default',
       }}>
       <div style={{
-        width: 38, height: 38, borderRadius: 10, flexShrink: 0,
-        background: `${r.color}15`, border: `1px solid ${r.color}33`,
+        width: 44, height: 44, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 18,
       }}>
-        {ub.badge.icon_url ?? '✦'}
+        {ub.badge.icon_url ? (
+          <div
+            style={{ width: 44, height: 44 }}
+            dangerouslySetInnerHTML={{ __html: ub.badge.icon_url }}
+          />
+        ) : (
+          <div style={{
+            width: 38, height: 38, borderRadius: 10,
+            background: `${r.color}15`, border: `1px solid ${r.color}33`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'var(--font-geist-mono)', fontWeight: 700, fontSize: 14, color: r.color,
+          }}>
+            {ub.badge.name[0]}
+          </div>
+        )}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontSize: 12, fontWeight: 600, color: '#F8FAFC', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -160,6 +172,11 @@ function BadgeCard({ ub }: { ub: UserBadge }) {
         <p style={{ fontSize: 10, color: r.color, fontFamily: 'var(--font-geist-mono)', fontWeight: 700 }}>
           {r.label}
         </p>
+        {ub.badge.description && (
+          <p style={{ fontSize: 10, color: '#334155', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {ub.badge.description}
+          </p>
+        )}
       </div>
     </div>
   )

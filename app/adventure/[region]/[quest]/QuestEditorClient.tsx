@@ -347,7 +347,17 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
         setExpPopup({ exp: d.exp_earned, streak: d.current_streak ?? 0, leveledUp: d.leveled_up ?? false, newLevel: d.new_level ?? 1 });
         setTimeout(() => setExpPopup(null), 4000);
       }
-      if (isPassed) setTimeout(() => router.refresh(), 2000);
+      if (isPassed) {
+        fetch('/api/badges/award', { method: 'POST' })
+          .then(r => r.json())
+          .then(d => {
+            if (d.data?.awarded?.length > 0) {
+              console.log('Badges awarded:', d.data.awarded)
+            }
+          })
+          .catch(() => {})
+        setTimeout(() => router.refresh(), 2000)
+      };
     } catch (e) {
       setFeedback({ status: "syntax_error", text: "Koneksi gagal. Coba lagi.", exp: 0 });
     } finally {
