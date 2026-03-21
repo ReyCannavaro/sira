@@ -19,13 +19,10 @@ interface Stats {
 }
 interface Badge { id: string; slug: string; name: string; description: string; category: string; rarity: string; icon_url: string | null }
 interface UserBadge { id: string; earned_at: string; is_featured: boolean; badge: Badge }
-interface SupabaseBadgeRow { id: string; earned_at: string; is_featured: boolean; badge: Badge | Badge[] | null }
-function normalizeBadges(rows: SupabaseBadgeRow[]): UserBadge[] {
-  return rows.map(r => ({ ...r, badge: Array.isArray(r.badge) ? r.badge[0] : r.badge })).filter(r => r.badge != null) as UserBadge[]
-}
 interface StreakDay { activity_date: string; quests_done: number; exp_earned: number }
 interface Membership { role: string; community: { id: string; name: string; type: string; weekly_exp_total: number; squad_war_rank: number | null } }
 interface RecentAttempt { id: string; exp_earned: number; status: string; created_at: string; quest: { title: string; difficulty: string } }
+interface WorkshopProject { id: string; title: string; description: string | null; is_public: boolean; updated_at: string }
 
 const HERO: Record<string, { label: string; color: string }> = {
   logic_warrior: { label: 'Logic Warrior', color: '#F59E0B' },
@@ -154,7 +151,7 @@ function BadgeCard({ ub }: { ub: UserBadge }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 18,
       }}>
-        {ub.badge.icon_url ?? '★'}
+        {ub.badge.icon_url ?? '✦'}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontSize: 12, fontWeight: 600, color: '#F8FAFC', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -168,10 +165,11 @@ function BadgeCard({ ub }: { ub: UserBadge }) {
   )
 }
 
-export default function ProfileClient({ profile, stats, userBadges, streaks, memberships, recentAttempts, isOwner }: {
+export default function ProfileClient({ profile, stats, userBadges, streaks, memberships, recentAttempts, workshopProjects, isOwner }: {
   profile: Profile; stats: Stats | null;
   userBadges: UserBadge[]; streaks: StreakDay[];
   memberships: Membership[]; recentAttempts: RecentAttempt[];
+  workshopProjects: WorkshopProject[];
   isOwner: boolean;
 }) {
   const router    = useRouter()
@@ -180,7 +178,7 @@ export default function ProfileClient({ profile, stats, userBadges, streaks, mem
   const lvProg    = stats ? getLevelProgress(stats.total_exp) : null
   const initial   = (profile.display_name || profile.username || '?')[0].toUpperCase()
 
-  const [tab, setTab] = useState<'badges' | 'history' | 'community'>('badges')
+  const [tab, setTab] = useState<'badges' | 'history' | 'community' | 'projects'>('badges')
 
   const featuredBadges = userBadges.filter(ub => ub.is_featured && ub.badge).slice(0, 3)
   const allBadges      = userBadges.filter(ub => ub.badge)
@@ -243,7 +241,7 @@ export default function ProfileClient({ profile, stats, userBadges, streaks, mem
               )}
 
               <p style={{ fontSize: 11, color: '#263348', marginBottom: 12 }}>
-                Bergabung {new Date(profile.created_at).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+                Bergabung {new Date(profile.created_at).getFullYear()}
               </p>
 
               {featuredBadges.length > 0 && (
@@ -257,7 +255,7 @@ export default function ProfileClient({ profile, stats, userBadges, streaks, mem
                         background: `${r.color}15`, border: `1px solid ${r.color}33`,
                         fontSize: 11, color: r.color,
                       }}>
-                        <span>{ub.badge.icon_url ?? '★'}</span>
+                        <span>{ub.badge.icon_url ?? '✦'}</span>
                         <span style={{ fontWeight: 600 }}>{ub.badge.name}</span>
                       </div>
                     )
@@ -290,7 +288,9 @@ export default function ProfileClient({ profile, stats, userBadges, streaks, mem
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
             <div style={{ background: '#111D35', border: '1px solid #1A2535', borderRadius: 16, padding: '18px 20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <h2 style={{ fontFamily: 'var(--font-geist-mono)', fontSize: 13, fontWeight: 700, color: '#F8FAFC' }}>
@@ -315,7 +315,7 @@ export default function ProfileClient({ profile, stats, userBadges, streaks, mem
 
             <div style={{ background: '#111D35', border: '1px solid #1A2535', borderRadius: 16, overflow: 'hidden' }}>
               <div style={{ display: 'flex', borderBottom: '1px solid #1A2535' }}>
-                {(['badges', 'history', 'community'] as const).map(t => (
+                {(['badges', 'history', 'community', 'projects'] as const).map(t => (
                   <button key={t} onClick={() => setTab(t)} style={{
                     flex: 1, padding: '12px 0', border: 'none', cursor: 'pointer',
                     fontFamily: 'var(--font-geist-mono)', fontSize: 11, fontWeight: 700,
@@ -324,10 +324,15 @@ export default function ProfileClient({ profile, stats, userBadges, streaks, mem
                     color: tab === t ? color : '#334155',
                     borderBottom: tab === t ? `2px solid ${color}` : '2px solid transparent',
                   }}>
-                    {t === 'badges' ? 'BADGE' : t === 'history' ? 'RIWAYAT' : 'KOMUNITAS'}
+                    {t === 'badges' ? 'BADGE' : t === 'history' ? 'RIWAYAT' : t === 'community' ? 'KOMUNITAS' : 'PROYEK'}
                     {t === 'badges' && allBadges.length > 0 && (
                       <span style={{ marginLeft: 6, padding: '0 5px', borderRadius: 99, background: `${color}22`, fontSize: 9 }}>
                         {allBadges.length}
+                      </span>
+                    )}
+                    {t === 'projects' && workshopProjects.length > 0 && (
+                      <span style={{ marginLeft: 6, padding: '0 5px', borderRadius: 99, background: `${color}22`, fontSize: 9 }}>
+                        {workshopProjects.length}
                       </span>
                     )}
                   </button>
@@ -408,6 +413,54 @@ export default function ProfileClient({ profile, stats, userBadges, streaks, mem
                             </div>
                           )
                         })}
+                      </div>
+                )}
+
+                {tab === 'projects' && (
+                  workshopProjects.length === 0
+                    ? <Empty text="Belum ada project Workshop yang disimpan." />
+                    : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+                        {workshopProjects.map(p => (
+                          <div key={p.id} style={{
+                            padding: '14px 16px', borderRadius: 12,
+                            background: '#0B1524', border: `1px solid ${color}18`,
+                            cursor: 'pointer', transition: 'all .18s',
+                          }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = `${color}44`; (e.currentTarget as HTMLElement).style.background = '#0F1A2E' }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = `${color}18`; (e.currentTarget as HTMLElement).style.background = '#0B1524' }}
+                            onClick={() => isOwner && router.push('/workshop')}
+                          >
+                            <div style={{ height: 2, background: `linear-gradient(90deg, ${color}, ${color}44)`, borderRadius: 99, marginBottom: 12 }} />
+
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                              <p style={{ fontSize: 13, fontWeight: 700, color: '#F1F5F9', lineHeight: 1.4, flex: 1, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                {p.title}
+                              </p>
+                              <div style={{
+                                padding: '2px 7px', borderRadius: 99, flexShrink: 0,
+                                background: p.is_public ? '#34D39915' : '#33415515',
+                                border: `1px solid ${p.is_public ? '#34D39933' : '#33415533'}`,
+                                fontSize: 9, color: p.is_public ? '#34D399' : '#475569',
+                                fontFamily: 'var(--font-geist-mono)', fontWeight: 700,
+                              }}>
+                                {p.is_public ? 'PUBLIK' : 'PRIVAT'}
+                              </div>
+                            </div>
+
+                            {p.description && (
+                              <p style={{ fontSize: 11, color: '#475569', lineHeight: 1.5, marginBottom: 8, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                {p.description}
+                              </p>
+                            )}
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#F59E0B', flexShrink: 0 }} />
+                              <span style={{ fontSize: 9, color: '#334155', fontFamily: 'var(--font-geist-mono)' }}>
+                                {new Date(p.updated_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                 )}
               </div>

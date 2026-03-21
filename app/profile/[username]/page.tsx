@@ -3,10 +3,11 @@ import { notFound } from 'next/navigation'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import ProfileClient from './ProfileClient'
 
-type Badge         = { id: string; slug: string; name: string; description: string; category: string; rarity: string; icon_url: string | null }
-type UserBadge     = { id: string; earned_at: string; is_featured: boolean; badge: Badge }
-type Membership    = { role: string; community: { id: string; name: string; type: string; weekly_exp_total: number; squad_war_rank: number | null } }
-type RecentAttempt = { id: string; exp_earned: number; status: string; created_at: string; quest: { title: string; difficulty: string } }
+type Badge            = { id: string; slug: string; name: string; description: string; category: string; rarity: string; icon_url: string | null }
+type UserBadge        = { id: string; earned_at: string; is_featured: boolean; badge: Badge }
+type Membership       = { role: string; community: { id: string; name: string; type: string; weekly_exp_total: number; squad_war_rank: number | null } }
+type RecentAttempt    = { id: string; exp_earned: number; status: string; created_at: string; quest: { title: string; difficulty: string } }
+type WorkshopProject  = { id: string; title: string; description: string | null; is_public: boolean; updated_at: string }
 
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }): Promise<Metadata> {
   const { username } = await params
@@ -33,7 +34,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ userna
   const isOwner = authUser?.id === profile.id
   if (!profile.is_public && !isOwner) notFound()
 
-  const [statsRes, badgesRes, streaksRes, membershipsRes, attemptsRes] = await Promise.all([
+  const [statsRes, badgesRes, streaksRes, membershipsRes, attemptsRes, workshopRes] = await Promise.all([
     supabase
       .from('user_stats')
       .select('total_exp, current_level, weekly_exp, quests_completed, current_streak, longest_streak, hints_used_total, clean_code_avg')
@@ -65,15 +66,22 @@ export default async function ProfilePage({ params }: { params: Promise<{ userna
       .in('status', ['passed_clean', 'passed_dirty'])
       .order('created_at', { ascending: false })
       .limit(10),
+
+    supabase
+      .from('workshop_projects')
+      .select('id, title, description, is_public, updated_at')
+      .eq('user_id', profile.id)
+      .order('updated_at', { ascending: false })
+      .limit(20),
   ])
 
-  const rawBadges = (badgesRes.data ?? []) as unknown as Array<{
-    id: string; earned_at: string; is_featured: boolean;
-    badge: Badge | Badge[] | null;
-  }>
+  const rawBadges  = (badgesRes.data ?? []) as unknown as Array<{ id: string; earned_at: string; is_featured: boolean; badge: Badge | Badge[] | null }>
   const userBadges: UserBadge[] = rawBadges
     .map(b => ({ ...b, badge: Array.isArray(b.badge) ? b.badge[0] : b.badge }))
     .filter(b => b.badge != null) as UserBadge[]
+
+  const allProjects     = (workshopRes.data ?? []) as WorkshopProject[]
+  const workshopProjects = isOwner ? allProjects : allProjects.filter(p => p.is_public)
 
   return (
     <ProfileClient
@@ -83,6 +91,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ userna
       streaks={streaksRes.data ?? []}
       memberships={(membershipsRes.data ?? []) as unknown as Membership[]}
       recentAttempts={(attemptsRes.data ?? []) as unknown as RecentAttempt[]}
+      workshopProjects={workshopProjects}
       isOwner={isOwner}
     />
   )
