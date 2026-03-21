@@ -306,7 +306,17 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
     let hadSyntaxError = false;
 
     if (isHTML) {
-      actualOutput = code; hadSyntaxError = false; setOutput(null);
+      // Normalize HTML: hapus semua whitespace antar tag sebelum compare
+      const normalizeForSubmit = (s: string) =>
+        s.trim()
+         .replace(/\r\n|\n|\r/g, '')
+         .replace(/\s+/g, ' ')
+         .replace(/ </g, '<')
+         .replace(/> /g, '>')
+         .replace(/ >/g, '>')
+      actualOutput = normalizeForSubmit(code)
+      hadSyntaxError = false
+      setOutput(null)
     } else if (quest.language === "javascript") {
       const r = runJavaScript(code);
       actualOutput = r.output; hadSyntaxError = r.hadSyntaxError;

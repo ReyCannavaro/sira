@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
   const isFirstPass = (passedCount ?? 0) === 0
 
   const normalize     = (s: string) => (s ?? '').trim().replace(/\r\n/g, '\n').replace(/[ \t]+$/gm, '')
-  const normalizeHTML = (s: string) => (s ?? '').trim().replace(/\r\n|\n|\r/g, '').replace(/\s{2,}/g, ' ').replace(/> </g, '><').replace(/ >/g, '>').toLowerCase()
+  const normalizeHTML = (s: string) => (s ?? '').trim().replace(/\r\n|\n|\r/g, '').replace(/\s+/g, ' ').replace(/ </g, '<').replace(/> /g, '>').replace(/ >/g, '>')
   const extractBody   = (s: string) => {
     const lower = s.toLowerCase()
     const start = lower.indexOf('<body')
@@ -142,9 +142,13 @@ export async function POST(request: NextRequest) {
 
     if (isHTMLQuest) {
       const submittedBody = normalizeHTML(extractBody(outputStr))
-      const expectedNorm  = normalizeHTML(expected_output)
       const submittedFull = normalizeHTML(outputStr)
-      allPassed = submittedBody === expectedNorm || submittedFull === expectedNorm
+      const expectedNorm  = normalizeHTML(expected_output)
+      // Cek 3 cara: body saja, full doc, atau expected ada di dalam submitted
+      allPassed = submittedBody === expectedNorm
+               || submittedFull === expectedNorm
+               || submittedFull.includes(expectedNorm)
+               || submittedBody.includes(expectedNorm)
     } else if (test_cases?.length > 0) {
       allPassed = test_cases.every(tc => normalize(outputStr) === normalize(tc.expected_output))
     } else {
