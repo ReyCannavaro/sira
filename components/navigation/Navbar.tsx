@@ -2,12 +2,8 @@
 
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import {
-  Map, Wrench, Users, Trophy, Settings,
-  LogOut, Menu, X, ChevronRight,
-} from "lucide-react";
+import { Map, Wrench, Users, Trophy, Settings, LogOut, Menu, X } from "lucide-react";
 
-/* ─── Props ──────────────────────────────────────────────────────────────── */
 interface NavbarProps {
   username:      string;
   displayName?:  string;
@@ -15,35 +11,67 @@ interface NavbarProps {
   currentLevel?: number;
 }
 
-/* ─── Nav items ──────────────────────────────────────────────────────────── */
 const NAV_ITEMS = [
-  { id: "adventure", label: "Adventure", href: "/adventure", Icon: Map     },
-  { id: "workshop",  label: "Workshop",  href: "/workshop",  Icon: Wrench  },
-  { id: "community", label: "Community", href: "/community", Icon: Users   },
+  { id: "adventure", label: "Adventure", href: "/adventure", Icon: Map    },
+  { id: "workshop",  label: "Workshop",  href: "/workshop",  Icon: Wrench },
+  { id: "community", label: "Community", href: "/community", Icon: Users  },
 ] as const;
 
 /* ─── Avatar ─────────────────────────────────────────────────────────────── */
-function Avatar({ username, avatarUrl, size = 30 }: {
+function Avatar({ username, avatarUrl, size = 28 }: {
   username: string; avatarUrl?: string | null; size?: number;
 }) {
-  const initial = (username || "H").charAt(0).toUpperCase();
   if (avatarUrl) {
     return (
       <img src={avatarUrl} alt={username}
-        style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", display: "block" }} />
+        style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", display: "block", flexShrink: 0 }} />
     );
   }
   return (
     <div style={{
       width: size, height: size, borderRadius: "50%", flexShrink: 0,
       display: "flex", alignItems: "center", justifyContent: "center",
-      background: "linear-gradient(135deg, rgba(34,211,238,0.25), rgba(167,139,250,0.25))",
-      border: "1.5px solid rgba(34,211,238,0.35)",
+      background: "linear-gradient(135deg, rgba(34,211,238,0.3), rgba(167,139,250,0.3))",
+      border: "2px solid rgba(34,211,238,0.4)",
       fontFamily: "var(--font-geist-mono)", fontWeight: 700,
-      fontSize: size * 0.42, color: "#22D3EE",
+      fontSize: size * 0.42, color: "#F8FAFC",
     }}>
-      {initial}
+      {(username || "H").charAt(0).toUpperCase()}
     </div>
+  );
+}
+
+/* ─── Bordered button (Settings / Logout style dari tim) ─────────────────── */
+function BorderBtn({
+  children, onClick, activeColor, isActive = false,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  activeColor?: string;
+  isActive?: boolean;
+}) {
+  const [hov, setHov] = useState(false);
+  const col = activeColor ?? "#475569";
+
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+        padding: "5px 12px", borderRadius: 8, cursor: "pointer",
+        fontFamily: "var(--font-inter)", fontSize: 13, fontWeight: 500,
+        transition: "all 0.2s",
+        background: isActive
+          ? `${col}18`
+          : hov ? `${col}0e` : "none",
+        border: `1px solid ${isActive ? col : hov ? col + "88" : "#334155"}`,
+        color: isActive ? col : hov ? col : "#475569",
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -51,127 +79,115 @@ function Avatar({ username, avatarUrl, size = 30 }: {
 export default function Navbar({ username, displayName, avatarUrl, currentLevel }: NavbarProps) {
   const router   = useRouter();
   const pathname = usePathname();
-
   const [menuOpen,     setMenuOpen]     = useState(false);
-  const [profileHover, setProfileHover] = useState(false);
+  const [avatarHovered, setAvatarHovered] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
 
   const isActive = (href: string) => pathname.startsWith(href);
+  const label    = displayName || username || "Hero";
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+    setLogoutLoading(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      router.push("/login");
+      router.refresh();
+    }
   };
-
-  const label = displayName || username || "Hero";
 
   return (
     <>
       <nav style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 50,
-        height: 56,
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+        background: "rgba(15,23,42,0.85)",
+        backdropFilter: "blur(16px)",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0 28px",
-        background: "rgba(8,14,26,0.85)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
-        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        padding: "0 32px", height: 60,
       }}>
 
         {/* ── Logo ── */}
-        <div onClick={() => router.push("/adventure")} style={{
-          display: "flex", alignItems: "center", gap: 9,
-          cursor: "pointer", flexShrink: 0,
-        }}>
+        <div onClick={() => router.push("/adventure")}
+          style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flexShrink: 0 }}>
           <div style={{
-            width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+            width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+            background: "linear-gradient(135deg, #22D3EE, #A78BFA)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            background: "linear-gradient(135deg, #22D3EE, #818CF8)",
-            boxShadow: "0 0 14px rgba(34,211,238,0.25)",
-            fontFamily: "var(--font-geist-mono)", fontWeight: 800,
-            fontSize: 14, color: "#06080F",
+            fontFamily: "var(--font-geist-mono)", fontWeight: 700, fontSize: 14, color: "#fff",
+            boxShadow: "0 0 12px rgba(34,211,238,0.2)",
           }}>
             S
           </div>
           <span style={{
             fontFamily: "var(--font-geist-mono)", fontWeight: 700,
-            fontSize: 15, letterSpacing: "0.16em", color: "#F1F5F9",
+            fontSize: 16, letterSpacing: "0.12em", color: "#F8FAFC",
           }}>
             SIRA
           </span>
         </div>
 
-        {/* ── Center nav — desktop ── */}
+        {/* ── Center nav items — desktop ── */}
         <div style={{
           position: "absolute", left: "50%", transform: "translateX(-50%)",
-          display: "flex", alignItems: "center", gap: 2,
-        }}
-          className="hidden-mobile"
-        >
+          display: "flex", gap: 4,
+        }} className="nav-desktop">
           {NAV_ITEMS.map(({ id, label: navLabel, href, Icon }) => {
             const active = isActive(href);
             return (
               <button key={id} onClick={() => router.push(href)} style={{
                 display: "flex", alignItems: "center", gap: 6,
-                padding: "6px 14px", borderRadius: 8,
-                border: "none", cursor: "pointer",
-                background: active ? "rgba(34,211,238,0.08)" : "transparent",
-                color: active ? "#22D3EE" : "#3D4F6A",
-                fontFamily: "var(--font-inter)", fontSize: 13, fontWeight: active ? 600 : 400,
-                transition: "all .18s",
-                position: "relative",
+                background: "none", cursor: "pointer",
+                padding: "6px 16px", borderRadius: 8,
+                fontFamily: "var(--font-inter)", fontSize: 14, fontWeight: 500,
+                color: active ? "#22D3EE" : "#475569",
+                borderBottom: `2px solid ${active ? "#22D3EE" : "transparent"}`,
+                borderTop: "2px solid transparent",
+                borderLeft: "none", borderRight: "none",
+                transition: "all 0.2s",
               }}
-                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.color = "#94A3B8" }}
-                onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.color = "#3D4F6A" }}
+                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.color = "#94A3B8"; }}
+                onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.color = "#475569"; }}
               >
                 <Icon size={13} strokeWidth={active ? 2 : 1.75} />
                 {navLabel}
-                {/* active underline */}
-                {active && (
-                  <span style={{
-                    position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
-                    width: "60%", height: 1.5, borderRadius: 99,
-                    background: "#22D3EE", boxShadow: "0 0 6px #22D3EE",
-                  }} />
-                )}
               </button>
             );
           })}
         </div>
 
         {/* ── Right side — desktop ── */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}
-          className="hidden-mobile"
-        >
-          {/* Leaderboard */}
-          <NavIconBtn
-            Icon={Trophy}
-            active={isActive("/leaderboard")}
-            activeColor="#F59E0B"
-            title="Leaderboard"
-            onClick={() => router.push("/leaderboard")}
-          />
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}
+          className="nav-desktop">
 
-          {/* Profile */}
+          {/* Leaderboard */}
+          <BorderBtn
+            onClick={() => router.push("/leaderboard")}
+            activeColor="#F59E0B"
+            isActive={isActive("/leaderboard")}
+          >
+            <Trophy size={14} strokeWidth={1.75} />
+          </BorderBtn>
+
+          {/* Profile pill */}
           <div
             onClick={() => router.push("/profile")}
-            onMouseEnter={() => setProfileHover(true)}
-            onMouseLeave={() => setProfileHover(false)}
+            onMouseEnter={() => setAvatarHovered(true)}
+            onMouseLeave={() => setAvatarHovered(false)}
             style={{
               display: "flex", alignItems: "center", gap: 8,
-              padding: "5px 10px 5px 6px", borderRadius: 20,
-              cursor: "pointer", transition: "all .18s",
-              background: isActive("/profile")
-                ? "rgba(34,211,238,0.08)"
-                : profileHover ? "rgba(255,255,255,0.04)" : "transparent",
-              border: `1px solid ${isActive("/profile") ? "rgba(34,211,238,0.3)" : profileHover ? "rgba(255,255,255,0.06)" : "transparent"}`,
+              padding: "4px 10px 4px 4px", borderRadius: 999, cursor: "pointer",
+              background: avatarHovered ? "rgba(34,211,238,0.08)" : "transparent",
+              border: `1px solid ${isActive("/profile") ? "#22D3EE" : avatarHovered ? "rgba(34,211,238,0.4)" : "transparent"}`,
+              transition: "all 0.2s",
             }}
           >
-            <Avatar username={username} avatarUrl={avatarUrl} size={26} />
+            <Avatar username={username} avatarUrl={avatarUrl} size={28} />
             <span style={{
-              fontFamily: "var(--font-inter)", fontSize: 12, fontWeight: isActive("/profile") ? 600 : 400,
-              color: isActive("/profile") ? "#22D3EE" : profileHover ? "#C1C9D4" : "#3D4F6A",
-              transition: "color .18s", whiteSpace: "nowrap",
+              fontSize: 13, fontFamily: "var(--font-inter)",
+              color: isActive("/profile") ? "#22D3EE" : avatarHovered ? "#F8FAFC" : "#475569",
+              fontWeight: isActive("/profile") ? 600 : 400,
+              transition: "color 0.2s",
             }}>
               {label}
             </span>
@@ -180,58 +196,59 @@ export default function Navbar({ username, displayName, avatarUrl, currentLevel 
                 fontFamily: "var(--font-geist-mono)", fontSize: 9, fontWeight: 700,
                 color: "#22D3EE", background: "rgba(34,211,238,0.1)",
                 border: "1px solid rgba(34,211,238,0.2)",
-                padding: "1px 5px", borderRadius: 4, letterSpacing: "0.06em",
+                padding: "1px 5px", borderRadius: 4, letterSpacing: "0.05em",
               }}>
                 LV{currentLevel}
               </span>
             )}
           </div>
 
-          {/* Divider */}
-          <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.06)", margin: "0 2px" }} />
-
           {/* Settings */}
-          <NavIconBtn
-            Icon={Settings}
-            active={isActive("/settings")}
-            activeColor="#A78BFA"
-            title="Settings"
+          <BorderBtn
             onClick={() => router.push("/settings")}
-          />
+            activeColor="#A78BFA"
+            isActive={isActive("/settings")}
+          >
+            <Settings size={14} strokeWidth={1.75} />
+          </BorderBtn>
 
           {/* Logout */}
-          <button onClick={handleLogout} style={{
-            display: "flex", alignItems: "center", gap: 5,
-            padding: "6px 10px", borderRadius: 8,
-            border: "1px solid transparent", background: "none", cursor: "pointer",
-            color: "#2A3A50", fontSize: 12, fontFamily: "var(--font-inter)",
-            transition: "all .18s",
-          }}
+          <button
+            onClick={handleLogout}
+            disabled={logoutLoading}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: "none", cursor: logoutLoading ? "not-allowed" : "pointer",
+              border: "1px solid #334155", borderRadius: 8,
+              padding: "5px 12px", color: "#475569",
+              fontFamily: "var(--font-inter)", fontSize: 13, fontWeight: 500,
+              transition: "all 0.2s",
+              opacity: logoutLoading ? 0.5 : 1,
+            }}
             onMouseEnter={e => {
-              (e.currentTarget as HTMLElement).style.color = "#F87171";
-              (e.currentTarget as HTMLElement).style.borderColor = "rgba(248,113,113,0.2)";
-              (e.currentTarget as HTMLElement).style.background = "rgba(248,113,113,0.04)";
+              if (!logoutLoading) {
+                (e.currentTarget as HTMLElement).style.borderColor = "#F87171";
+                (e.currentTarget as HTMLElement).style.color = "#F87171";
+              }
             }}
             onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.color = "#2A3A50";
-              (e.currentTarget as HTMLElement).style.borderColor = "transparent";
-              (e.currentTarget as HTMLElement).style.background = "none";
+              (e.currentTarget as HTMLElement).style.borderColor = "#334155";
+              (e.currentTarget as HTMLElement).style.color = "#475569";
             }}
           >
             <LogOut size={13} strokeWidth={1.75} />
-            Keluar
+            {logoutLoading ? "Keluar..." : "Keluar"}
           </button>
         </div>
 
         {/* ── Hamburger — mobile ── */}
         <button
           onClick={() => setMenuOpen(v => !v)}
-          className="show-mobile"
+          className="nav-mobile"
           style={{
             display: "none", alignItems: "center", justifyContent: "center",
-            width: 34, height: 34, borderRadius: 8,
-            border: "1px solid rgba(255,255,255,0.06)",
-            background: "none", cursor: "pointer", color: "#3D4F6A",
+            width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+            border: "1px solid #334155", background: "none", cursor: "pointer", color: "#475569",
           }}
         >
           {menuOpen ? <X size={16} /> : <Menu size={16} />}
@@ -240,82 +257,92 @@ export default function Navbar({ username, displayName, avatarUrl, currentLevel 
 
       {/* ── Mobile drawer ── */}
       {menuOpen && (
-        <div style={{
-          position: "fixed", top: 56, left: 0, right: 0, zIndex: 49,
-          background: "rgba(6,10,20,0.97)",
-          backdropFilter: "blur(20px)",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
-          animation: "drawer-down .2s ease",
-        }}
-          className="show-mobile"
+        <div
+          className="nav-mobile"
+          style={{
+            position: "fixed", top: 60, left: 0, right: 0, zIndex: 99,
+            background: "rgba(15,23,42,0.98)",
+            backdropFilter: "blur(16px)",
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
+            display: "flex", flexDirection: "column",
+            animation: "drawer-drop .2s ease",
+          }}
         >
-          {/* User row */}
+          {/* User info */}
           <div style={{
             display: "flex", alignItems: "center", gap: 10,
-            padding: "14px 20px 12px",
-            borderBottom: "1px solid rgba(255,255,255,0.04)",
+            padding: "14px 24px 12px",
+            borderBottom: "1px solid #1E293B",
           }}>
-            <Avatar username={username} avatarUrl={avatarUrl} size={34} />
+            <Avatar username={username} avatarUrl={avatarUrl} size={32} />
             <div>
-              <p style={{ fontSize: 13, fontWeight: 600, color: "#F1F5F9", fontFamily: "var(--font-geist-mono)" }}>{label}</p>
+              <p style={{ fontSize: 13, fontWeight: 600, color: "#F8FAFC", fontFamily: "var(--font-geist-mono)" }}>
+                {label}
+              </p>
               {currentLevel !== undefined && (
-                <p style={{ fontSize: 10, color: "#22D3EE", fontFamily: "var(--font-geist-mono)" }}>Level {currentLevel}</p>
+                <p style={{ fontSize: 10, color: "#475569", marginTop: 1 }}>Level {currentLevel}</p>
               )}
             </div>
           </div>
 
           {/* Nav links */}
-          <div style={{ padding: "8px 0" }}>
+          <div style={{ padding: "6px 0" }}>
             {NAV_ITEMS.map(({ id, label: navLabel, href, Icon }) => {
               const active = isActive(href);
               return (
-                <button key={id} onClick={() => { router.push(href); setMenuOpen(false); }} style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  width: "100%", padding: "11px 20px",
-                  border: "none", background: active ? "rgba(34,211,238,0.06)" : "none",
-                  borderLeft: `2px solid ${active ? "#22D3EE" : "transparent"}`,
-                  cursor: "pointer", transition: "all .15s",
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <Icon size={14} strokeWidth={1.75} color={active ? "#22D3EE" : "#3D4F6A"} />
-                    <span style={{ fontSize: 13, color: active ? "#22D3EE" : "#3D4F6A", fontWeight: active ? 600 : 400 }}>
-                      {navLabel}
-                    </span>
-                  </div>
-                  {active && <ChevronRight size={13} color="#22D3EE" />}
+                <button key={id} onClick={() => { router.push(href); setMenuOpen(false); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    width: "100%", padding: "11px 24px",
+                    background: "none", cursor: "pointer",
+                    border: "none",
+                    borderLeft: `2px solid ${active ? "#22D3EE" : "transparent"}`,
+                    color: active ? "#22D3EE" : "#475569",
+                    fontSize: 14, fontFamily: "var(--font-inter)", fontWeight: active ? 600 : 400,
+                    transition: "all 0.15s",
+                  }}>
+                  <Icon size={15} strokeWidth={1.75} />
+                  {navLabel}
                 </button>
               );
             })}
 
-            {/* Leaderboard */}
-            <button onClick={() => { router.push("/leaderboard"); setMenuOpen(false); }} style={{
-              display: "flex", alignItems: "center", gap: 10,
-              width: "100%", padding: "11px 20px",
-              border: "none", borderLeft: `2px solid ${isActive("/leaderboard") ? "#F59E0B" : "transparent"}`,
-              background: isActive("/leaderboard") ? "rgba(245,158,11,0.06)" : "none", cursor: "pointer",
-            }}>
-              <Trophy size={14} strokeWidth={1.75} color={isActive("/leaderboard") ? "#F59E0B" : "#3D4F6A"} />
-              <span style={{ fontSize: 13, color: isActive("/leaderboard") ? "#F59E0B" : "#3D4F6A" }}>Leaderboard</span>
+            <button onClick={() => { router.push("/leaderboard"); setMenuOpen(false); }}
+              style={{
+                display: "flex", alignItems: "center", gap: 12,
+                width: "100%", padding: "11px 24px",
+                background: "none", cursor: "pointer", border: "none",
+                borderLeft: `2px solid ${isActive("/leaderboard") ? "#F59E0B" : "transparent"}`,
+                color: isActive("/leaderboard") ? "#F59E0B" : "#475569",
+                fontSize: 14, fontFamily: "var(--font-inter)",
+              }}>
+              <Trophy size={15} strokeWidth={1.75} />
+              Leaderboard
             </button>
           </div>
 
           {/* Footer */}
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.04)", padding: "8px 0 12px" }}>
-            <button onClick={() => { router.push("/settings"); setMenuOpen(false); }} style={{
-              display: "flex", alignItems: "center", gap: 10,
-              width: "100%", padding: "11px 20px",
-              border: "none", background: "none", cursor: "pointer",
-            }}>
-              <Settings size={14} strokeWidth={1.75} color="#3D4F6A" />
-              <span style={{ fontSize: 13, color: "#3D4F6A" }}>Settings</span>
+          <div style={{ borderTop: "1px solid #1E293B", padding: "6px 0 8px" }}>
+            <button onClick={() => { router.push("/settings"); setMenuOpen(false); }}
+              style={{
+                display: "flex", alignItems: "center", gap: 12,
+                width: "100%", padding: "11px 24px",
+                background: "none", cursor: "pointer", border: "none",
+                color: "#475569", fontSize: 14, fontFamily: "var(--font-inter)",
+              }}>
+              <Settings size={15} strokeWidth={1.75} />
+              Settings
             </button>
-            <button onClick={handleLogout} style={{
-              display: "flex", alignItems: "center", gap: 10,
-              width: "100%", padding: "11px 20px",
-              border: "none", background: "none", cursor: "pointer",
-            }}>
-              <LogOut size={14} strokeWidth={1.75} color="#F87171" />
-              <span style={{ fontSize: 13, color: "#F87171" }}>Keluar</span>
+            <button onClick={handleLogout} disabled={logoutLoading}
+              style={{
+                display: "flex", alignItems: "center", gap: 12,
+                width: "100%", padding: "11px 24px",
+                background: "none", cursor: "pointer", border: "none",
+                color: "#F87171", fontSize: 14, fontFamily: "var(--font-inter)",
+                opacity: logoutLoading ? 0.5 : 1,
+              }}>
+              <LogOut size={15} strokeWidth={1.75} />
+              {logoutLoading ? "Keluar..." : "Keluar"}
             </button>
           </div>
         </div>
@@ -323,44 +350,18 @@ export default function Navbar({ username, displayName, avatarUrl, currentLevel 
 
       <style jsx>{`
         @media (min-width: 768px) {
-          .hidden-mobile { display: flex !important; }
-          .show-mobile   { display: none !important; }
+          .nav-desktop { display: flex !important; }
+          .nav-mobile  { display: none  !important; }
         }
         @media (max-width: 767px) {
-          .hidden-mobile { display: none !important; }
-          .show-mobile   { display: flex !important; }
+          .nav-desktop { display: none  !important; }
+          .nav-mobile  { display: flex  !important; }
         }
-        @keyframes drawer-down {
-          from { opacity: 0; transform: translateY(-8px); }
+        @keyframes drawer-drop {
+          from { opacity: 0; transform: translateY(-6px); }
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </>
-  );
-}
-
-/* ─── Icon button helper ─────────────────────────────────────────────────── */
-function NavIconBtn({ Icon, active, activeColor, title, onClick }: {
-  Icon: React.ElementType; active: boolean;
-  activeColor: string; title: string; onClick: () => void;
-}) {
-  const [hov, setHov] = useState(false);
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        display: "flex", alignItems: "center", justifyContent: "center",
-        width: 32, height: 32, borderRadius: 8,
-        border: `1px solid ${active ? activeColor + "33" : hov ? "rgba(255,255,255,0.06)" : "transparent"}`,
-        background: active ? `${activeColor}10` : hov ? "rgba(255,255,255,0.03)" : "none",
-        cursor: "pointer", transition: "all .18s",
-        color: active ? activeColor : hov ? "#64748B" : "#2A3A50",
-      }}
-    >
-      <Icon size={14} strokeWidth={active ? 2 : 1.75} />
-    </button>
   );
 }

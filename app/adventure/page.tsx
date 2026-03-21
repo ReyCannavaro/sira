@@ -130,6 +130,7 @@ function QuestNode({ quest, pos, color, hovered, selected, onHover, onClick, idx
 
       {done && <circle r={5} fill={color} opacity="0.9" style={{ filter: `drop-shadow(0 0 3px ${color})` }} />}
       {active && <circle r={3.5} fill={color} opacity="0.8" style={{ animation: "ring-pulse 1.8s ease-in-out infinite" }} />}
+
       {lit && (
         <g>
           <rect x={-54} y={r + 5} width={108} height={22} rx={4}
@@ -237,7 +238,7 @@ function QuestPanel({ quest, color, slug, onClose }: {
         }}>
           {quest.title}
         </p>
-        <p style={{ fontSize: 11, color: "#2D3F55", marginBottom: 14 }}>Quest #{quest.order_index}</p>
+        <p style={{ fontSize: 11, color: "#64748B", marginBottom: 14 }}>Quest #{quest.order_index}</p>
 
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={onClose} style={{
@@ -403,6 +404,7 @@ export default function AdventurePage() {
   }, [router]);
 
   const lvProgress = stats ? getLevelProgress(stats.total_exp) : null;
+
   const questsByRegion: Record<RegionKey, QuestMapData[]> = {
     coastal: coastalQuests, highlands: highlandsQuests, citadel: citadelQuests,
   };
@@ -458,7 +460,7 @@ export default function AdventurePage() {
               <h1 style={{ fontFamily: "var(--font-geist-mono)", fontSize: 24, fontWeight: 800, color: "#F1F5F9", marginBottom: 3 }}>
                 Adventure Map
               </h1>
-              <p style={{ fontSize: 13, color: "#3D4F6A" }}>
+              <p style={{ fontSize: 13, color: "#94A3B8" }}>
                 {loading
                   ? "Memuat data..."
                   : `${profile?.display_name ?? profile?.username ?? "Prajurit"} — ${activeAll.length > 0 ? `${activeAll.length} quest aktif` : "Semua quest selesai"}`}
@@ -473,7 +475,7 @@ export default function AdventurePage() {
                   { label: "Minggu ini",value: `+${formatExp(stats.weekly_exp)}`, color: "#22D3EE" },
                 ].map(s => (
                   <div key={s.label} style={{ textAlign: "right" }}>
-                    <p style={{ fontSize: 11, color: "#1E2D42", marginBottom: 1 }}>{s.label}</p>
+                    <p style={{ fontSize: 11, color: "#475569", marginBottom: 1 }}>{s.label}</p>
                     <p style={{ fontFamily: "var(--font-geist-mono)", fontSize: 13, fontWeight: 700, color: s.color }}>{s.value}</p>
                   </div>
                 ))}
@@ -500,7 +502,7 @@ export default function AdventurePage() {
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 11, color: "#1E2D42" }}>
+                  <span style={{ fontSize: 11, color: "#475569" }}>
                     Level {stats.current_level} → {stats.current_level + 1}
                   </span>
                   <span style={{ fontFamily: "var(--font-geist-mono)", fontSize: 11, fontWeight: 700, color: currentColor }}>
@@ -546,7 +548,7 @@ export default function AdventurePage() {
                     }}>
                       {meta.label}
                     </p>
-                    <p style={{ fontSize: 10, color: "#1E2D42" }}>{meta.subtitle}</p>
+                    <p style={{ fontSize: 10, color: "#475569" }}>{meta.subtitle}</p>
                     <div style={{ marginTop: 5, height: 2, background: "#1A2535", borderRadius: 99, overflow: "hidden", width: "100%" }}>
                       <div style={{ height: "100%", width: `${pct}%`, background: meta.color, transition: "width .5s ease", borderRadius: 99 }} />
                     </div>
@@ -578,7 +580,7 @@ export default function AdventurePage() {
                 ].map(l => (
                   <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
                     <div style={{ width: 7, height: 7, borderRadius: "50%", background: l.fill }} />
-                    <span style={{ fontSize: 10, color: "#1E2D42" }}>{l.label}</span>
+                    <span style={{ fontSize: 10, color: "#475569" }}>{l.label}</span>
                   </div>
                 ))}
               </div>
@@ -588,11 +590,11 @@ export default function AdventurePage() {
               {loading ? (
                 <div style={{ padding: "80px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
                   <div style={{ width: 32, height: 32, borderRadius: "50%", border: `2px solid ${currentColor}33`, borderTopColor: currentColor, animation: "spin 1s linear infinite" }} />
-                  <span style={{ fontSize: 12, color: "#1E2D42" }}>Memuat peta...</span>
+                  <span style={{ fontSize: 12, color: "#475569" }}>Memuat peta...</span>
                 </div>
               ) : currentQuests.length === 0 ? (
                 <div style={{ padding: "60px 0", textAlign: "center" }}>
-                  <p style={{ fontSize: 13, color: "#1E2D42" }}>Belum ada quest di region ini.</p>
+                  <p style={{ fontSize: 13, color: "#475569" }}>Belum ada quest di region ini.</p>
                 </div>
               ) : (
                 <RegionMap
@@ -606,6 +608,7 @@ export default function AdventurePage() {
           </div>
 
           <div style={{ width: 292, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+
             {selectedQuest && (
               <QuestPanel
                 quest={selectedQuest}
@@ -629,7 +632,7 @@ export default function AdventurePage() {
                   [1, 2, 3].map(i => <Shimmer key={i} h={80} r={10} />)
                 ) : activeAll.length === 0 ? (
                   <div style={{ padding: "28px 0", textAlign: "center" }}>
-                    <p style={{ fontSize: 12, color: "#1E2D42" }}>Semua quest selesai.</p>
+                    <p style={{ fontSize: 12, color: "#475569" }}>Semua quest selesai.</p>
                   </div>
                 ) : (
                   activeAll.map(({ quest, region }) => (
@@ -647,7 +650,7 @@ export default function AdventurePage() {
 
             {!loading && (
               <div style={{ background: "#0B1524", border: "1px solid #1A2535", borderRadius: 14, padding: "14px 16px" }}>
-                <p style={{ fontFamily: "var(--font-geist-mono)", fontSize: 10, fontWeight: 700, color: "#1E2D42", letterSpacing: "0.12em", marginBottom: 14 }}>
+                <p style={{ fontFamily: "var(--font-geist-mono)", fontSize: 10, fontWeight: 700, color: "#475569", letterSpacing: "0.12em", marginBottom: 14 }}>
                   PROGRESS REGION
                 </p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -657,7 +660,7 @@ export default function AdventurePage() {
                     return (
                       <div key={key}>
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                          <span style={{ fontSize: 11, color: "#3D4F6A" }}>{meta.label}</span>
+                          <span style={{ fontSize: 11, color: "#94A3B8" }}>{meta.label}</span>
                           <span style={{ fontFamily: "var(--font-geist-mono)", fontSize: 10, fontWeight: 700, color: meta.color }}>
                             {done}/{total}
                           </span>
