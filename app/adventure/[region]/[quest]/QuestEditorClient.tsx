@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Lightbulb, Play, RotateCcw, CheckCircle, XCircle, AlertCircle, Zap, Flame } from "lucide-react";
+import { ArrowLeft, ArrowRight, Lightbulb, Play, RotateCcw, CheckCircle, XCircle, AlertCircle, Zap, Flame, Loader2 } from "lucide-react";
 
 interface Quest {
   id: string; slug: string; title: string;
@@ -172,7 +172,32 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
   const [hintVisible,  setHintVisible]  = useState<string | null>(null);
   const [startTime]                     = useState(Date.now());
   const [output,       setOutput]       = useState<string | null>(null);
+  const [pyReady,      setPyReady]      = useState(false);
+  const workerRef  = useRef<Worker | null>(null);
+  const pendingRef = useRef<Map<string, (r: { output: string; error: string | null; stderr: string }) => void>>(new Map());
   const [expPopup,     setExpPopup]     = useState<{ exp: number; streak: number; leveledUp: boolean; newLevel: number } | null>(null);
+  useEffect(() => {
+    if (quest.language !== "python") return;
+    const worker = new Worker("/pyodide-worker.js");
+    worker.onmessage = (e) => {
+      const { id, output, error, stderr } = e.data;
+      if (id === "__ready__") { setPyReady(true); return; }
+      const resolve = pendingRef.current.get(id);
+      if (resolve) { resolve({ output: output ?? "", error, stderr: stderr ?? "" }); pendingRef.current.delete(id); }
+    };
+    setTimeout(() => worker.postMessage({ id: "__ready__", code: 'print("ok")', packages: [] }), 200);
+    workerRef.current = worker;
+    return () => worker.terminate();
+  }, [quest.language]);
+
+  const runPythonCode = (code: string): Promise<{ output: string; error: string | null; stderr: string }> => {
+    return new Promise((resolve) => {
+      const id = Math.random().toString(36).slice(2);
+      pendingRef.current.set(id, resolve);
+      workerRef.current?.postMessage({ id, code, packages: [] });
+    });
+  };
+
   const isRetry = !isFirstPass;
 
   const isHTMLCode = (src: string) => {
@@ -219,6 +244,17 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
       const result   = runJavaScript(code);
       actualOutput   = result.output;
       hadSyntaxError = result.hadSyntaxError;
+      setOutput(actualOutput || null);
+    } else if (quest.language === "python") {
+      if (!workerRef.current) {
+        setFeedback({ status: "syntax_error", text: "Python runtime belum siap. Tunggu sebentar lalu coba lagi.", exp: 0 });
+        setSubmitting(false);
+        return;
+      }
+      const pyResult    = await runPythonCode(code);
+      actualOutput      = pyResult.output.trim();
+      hadSyntaxError    = !!pyResult.error;
+      if (hadSyntaxError) actualOutput = pyResult.error ?? pyResult.stderr ?? "";
       setOutput(actualOutput || null);
     }
 
@@ -398,7 +434,20 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
           </NeonBadge>
           <span style={{ width: 1, height: 14, background: "#1A2535", display: "inline-block" }} />
           <NeonBadge color="#475569">
-            {quest.language === "javascript" ? "JavaScript" : "Python"}
+            {quest.language === "javascript" ? "JavaScript" : (
+              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                Python
+                {!pyReady && (
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <Loader2 size={10} style={{ animation: "spin 1s linear infinite", opacity: 0.6 }} />
+                    <span style={{ fontSize: 9, opacity: 0.6 }}>loading...</span>
+                  </span>
+                )}
+                {pyReady && (
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#34D399", boxShadow: "0 0 4px #34D39988", display: "inline-block" }} />
+                )}
+              </span>
+            )}
           </NeonBadge>
         </div>
       </div>

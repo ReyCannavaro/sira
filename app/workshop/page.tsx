@@ -11,11 +11,13 @@ import {
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser'
 import Navbar from '@/components/navigation/Navbar'
 
+/* ─── Types ── */
 interface ConsoleEntry { type: 'log' | 'error' | 'warn' | 'info'; args: string[]; ts: number }
 interface Profile { username: string; display_name: string; avatar_url: string | null }
 interface Stats { current_level: number }
 interface Project { id: string; title: string; description: string | null; is_public: boolean; updated_at: string }
 
+/* ─── Templates ── */
 const TEMPLATES: Record<string, { label: string; html: string; css: string; js: string }> = {
   blank: {
     label: 'Blank',
@@ -43,6 +45,7 @@ const TEMPLATES: Record<string, { label: string; html: string; css: string; js: 
   },
 }
 
+/* ─── Save Modal ── */
 function SaveModal({ html, css, js, currentProject, onClose, onSaved }: {
   html: string; css: string; js: string;
   currentProject: { id: string; title: string } | null;
@@ -147,6 +150,7 @@ function SaveModal({ html, css, js, currentProject, onClose, onSaved }: {
   )
 }
 
+/* ─── Projects Drawer ── */
 function ProjectsDrawer({ onLoad, onClose, currentId }: {
   onLoad: (p: { id: string; title: string; html: string; css: string; js: string }) => void;
   onClose: () => void;
@@ -180,6 +184,7 @@ function ProjectsDrawer({ onLoad, onClose, currentId }: {
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', justifyContent: 'flex-end' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{ width: 340, background: '#0A1220', borderLeft: '1px solid #1A2535', display: 'flex', flexDirection: 'column', animation: 'slide-left .2s ease' }}>
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #1A2535' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <FolderOpen size={15} color="#22D3EE" strokeWidth={1.75} />
@@ -190,6 +195,7 @@ function ProjectsDrawer({ onLoad, onClose, currentId }: {
           </button>
         </div>
 
+        {/* List */}
         <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
@@ -245,6 +251,7 @@ function ProjectsDrawer({ onLoad, onClose, currentId }: {
   )
 }
 
+/* ─── Toast ── */
 function Toast({ msg, type }: { msg: string; type: 'success' | 'error' }) {
   return (
     <div style={{
@@ -265,6 +272,7 @@ function Toast({ msg, type }: { msg: string; type: 'success' | 'error' }) {
   )
 }
 
+/* ─── Code Editor ── */
 function CodeEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const taRef  = useRef<HTMLTextAreaElement>(null)
   const lnRef  = useRef<HTMLDivElement>(null)
@@ -309,17 +317,123 @@ function CodeEditor({ value, onChange }: { value: string; onChange: (v: string) 
   )
 }
 
+/* ─── Python Editor ── */
+function PythonEditor({ value, onChange, onRun, output, error, loading, ready }: {
+  value: string; onChange: (v: string) => void; onRun: () => void
+  output: string; error: string; loading: boolean; ready: boolean
+}) {
+  const taRef = useRef<HTMLTextAreaElement>(null)
+  const lnRef = useRef<HTMLDivElement>(null)
+  const lines = value.split("\n").length
+
+  const syncScroll = () => {
+    if (taRef.current && lnRef.current) lnRef.current.scrollTop = taRef.current.scrollTop
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Tab") {
+      e.preventDefault()
+      const ta = e.currentTarget
+      const start = ta.selectionStart
+      const next = value.slice(0, start) + "    " + value.slice(ta.selectionEnd)
+      onChange(next)
+      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 4 })
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") onRun()
+  }
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* Editor */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", background: "#070D1A" }}>
+        <div ref={lnRef} style={{ width: 44, flexShrink: 0, overflowY: "hidden", background: "#080F1C", borderRight: "1px solid #1A2535", paddingTop: 14, userSelect: "none" }}>
+          {Array.from({ length: lines }, (_, i) => (
+            <div key={i} style={{ fontSize: 11, lineHeight: "1.7em", paddingRight: 10, textAlign: "right", color: "#1E2D42", fontFamily: "var(--font-jetbrains-mono)" }}>
+              {i + 1}
+            </div>
+          ))}
+        </div>
+        <textarea
+          ref={taRef}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onScroll={syncScroll}
+          spellCheck={false}
+          autoComplete="off" autoCorrect="off" autoCapitalize="off"
+          style={{ flex: 1, resize: "none", border: "none", outline: "none", background: "transparent", color: "#E2E8F0", fontFamily: "var(--font-jetbrains-mono)", fontSize: 13, lineHeight: "1.7em", padding: "14px 16px", overflowY: "auto" }}
+        />
+      </div>
+
+      {/* Run bar */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", background: "#080F1C", borderTop: "1px solid #1A2535", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 7, height: 7, borderRadius: "50%", background: ready ? "#34D399" : "#F59E0B", boxShadow: ready ? "0 0 6px #34D39988" : "0 0 6px #F59E0B88" }} />
+          <span style={{ fontSize: 10, color: "#334155", fontFamily: "var(--font-geist-mono)" }}>
+            {ready ? "Pyodide siap" : "Loading Python runtime..."}
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 10, color: "#263348" }}>Ctrl+Enter</span>
+          <button onClick={onRun} disabled={loading || !ready} style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "6px 14px", borderRadius: 7, border: "none",
+            background: loading || !ready ? "#1A2535" : "#34D399",
+            color: loading || !ready ? "#334155" : "#080F1C",
+            cursor: loading || !ready ? "not-allowed" : "pointer",
+            fontSize: 11, fontWeight: 700, fontFamily: "var(--font-geist-mono)",
+          }}>
+            {loading
+              ? <><Loader2 size={11} style={{ animation: "spin 1s linear infinite" }} /> Running...</>
+              : <><Play size={11} strokeWidth={2.5} fill="currentColor" /> Run Python</>
+            }
+          </button>
+        </div>
+      </div>
+
+      {/* Output panel */}
+      <div style={{ height: "35%", flexShrink: 0, display: "flex", flexDirection: "column", borderTop: "1px solid #1A2535" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 13px", background: "#080F1C", borderBottom: "1px solid #1A2535", flexShrink: 0 }}>
+          <Terminal size={11} color="#475569" strokeWidth={1.75} />
+          <span style={{ fontSize: 10, color: "#334155", fontFamily: "var(--font-geist-mono)", letterSpacing: "0.1em" }}>OUTPUT</span>
+          {error && <span style={{ fontSize: 10, color: "#F87171", marginLeft: 4 }}>— ERROR</span>}
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px", background: "#060C18", fontFamily: "var(--font-jetbrains-mono)", fontSize: 12 }}>
+          {!output && !error && !loading && (
+            <span style={{ color: "#1E2D42" }}>// Klik Run atau tekan Ctrl+Enter untuk menjalankan Python</span>
+          )}
+          {loading && <span style={{ color: "#34D39966" }}>Menjalankan...</span>}
+          {output && <pre style={{ color: "#E2E8F0", margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{output}</pre>}
+          {error && (
+            <pre style={{ color: "#F87171", margin: output ? "8px 0 0" : 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+              {error}
+            </pre>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Main Page ── */
 export default function WorkshopPage() {
   const router = useRouter()
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [stats,   setStats]   = useState<Stats | null>(null)
 
-  const [html, setHtml] = useState(TEMPLATES.hello.html)
-  const [css,  setCss]  = useState(TEMPLATES.hello.css)
-  const [js,   setJs]   = useState(TEMPLATES.hello.js)
+  const [html,   setHtml]   = useState(TEMPLATES.hello.html)
+  const [css,    setCss]    = useState(TEMPLATES.hello.css)
+  const [js,     setJs]     = useState(TEMPLATES.hello.js)
+  const [python, setPython] = useState('# Python Workshop\nprint("Halo dari Python!")\n\n# Coba numpy\n# import numpy as np\n# arr = np.array([1, 2, 3, 4, 5])\n# print("Sum:", np.sum(arr))')
+  const [pyOutput,   setPyOutput]   = useState<string>('')
+  const [pyError,    setPyError]    = useState<string>('')
+  const [pyLoading,  setPyLoading]  = useState(false)
+  const [pyReady,    setPyReady]    = useState(false)
+  const workerRef = useRef<Worker | null>(null)
+  const pendingRef = useRef<Map<string, (result: { output: string; error: string | null; stderr: string }) => void>>(new Map())
 
-  const [activeTab,     setActiveTab]     = useState<'html' | 'css' | 'js'>('html')
+  const [activeTab,     setActiveTab]     = useState<'html' | 'css' | 'js' | 'python'>('html')
   const [consoleLogs,   setConsoleLogs]   = useState<ConsoleEntry[]>([])
   const [showTemplates, setShowTemplates] = useState(false)
   const [showSave,      setShowSave]      = useState(false)
@@ -330,6 +444,7 @@ export default function WorkshopPage() {
   const [toast,         setToast]         = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [isDirty,       setIsDirty]       = useState(false)
 
+  // Project yang sedang aktif
   const [currentProject, setCurrentProject] = useState<{ id: string; title: string } | null>(null)
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -337,6 +452,7 @@ export default function WorkshopPage() {
     setTimeout(() => setToast(null), 3000)
   }
 
+  // Load user
   useEffect(() => {
     const sb = createSupabaseBrowserClient()
     sb.auth.getUser().then(({ data: { user } }) => {
@@ -348,14 +464,40 @@ export default function WorkshopPage() {
     })
   }, [])
 
+  // Init Pyodide Worker
+  useEffect(() => {
+    const worker = new Worker('/pyodide-worker.js')
+    worker.onmessage = (e) => {
+      const { id, output, error, stderr } = e.data
+      if (id === '__ready__') { setPyReady(true); return }
+      const resolve = pendingRef.current.get(id)
+      if (resolve) { resolve({ output, error, stderr }); pendingRef.current.delete(id) }
+    }
+    // Kirim ping untuk cek kalau worker ready
+    setTimeout(() => worker.postMessage({ id: '__ready__', code: 'print("ready")', packages: [] }), 100)
+    workerRef.current = worker
+    return () => worker.terminate()
+  }, [])
+
+  const runPython = (code: string): Promise<{ output: string; error: string | null; stderr: string }> => {
+    return new Promise((resolve) => {
+      const id = Math.random().toString(36).slice(2)
+      pendingRef.current.set(id, resolve)
+      workerRef.current?.postMessage({ id, code, packages: [] })
+    })
+  }
+
+  // Auto run
   useEffect(() => {
     if (!autoRun) return
     const t = setTimeout(() => setRunKey(k => k + 1), 800)
     return () => clearTimeout(t)
   }, [html, css, js, autoRun])
 
+  // Track perubahan
   useEffect(() => { setIsDirty(true) }, [html, css, js])
 
+  // Console listener
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === 'console') {
@@ -366,11 +508,13 @@ export default function WorkshopPage() {
     return () => window.removeEventListener('message', handler)
   }, [])
 
+  // Ctrl+S shortcut
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
         if (currentProject) {
+          // Quick save kalau sudah ada project
           handleQuickSave()
         } else {
           setShowSave(true)
@@ -446,16 +590,18 @@ ${html.replace(/<!DOCTYPE[^>]*>/i,'').replace(/<html[^>]*>/i,'').replace(/<\/htm
     const a    = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${currentProject?.title ?? 'workshop'}.html`; a.click()
   }
 
-  const TAB_COLOR = { html: '#F59E0B', css: '#A78BFA', js: '#22D3EE' }
-  const values    = { html, css, js }
-  const setters   = { html: setHtml, css: setCss, js: setJs }
+  const TAB_COLOR = { html: '#F59E0B', css: '#A78BFA', js: '#22D3EE', python: '#34D399' }
+  const values    = { html, css, js, python }
+  const setters   = { html: setHtml, css: setCss, js: setJs, python: setPython }
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0A1220', color: '#F8FAFC', overflow: 'hidden' }}>
       <Navbar username={profile?.username ?? ''} displayName={profile?.display_name} avatarUrl={profile?.avatar_url} currentLevel={stats?.current_level} />
 
+      {/* ── Topbar ── */}
       <div style={{ height: 50, flexShrink: 0, marginTop: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', background: '#080F1C', borderBottom: '1px solid #1A2535' }}>
 
+        {/* Kiri: nama project */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Code2 size={15} color="#22D3EE" strokeWidth={1.75} />
           <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: 13, fontWeight: 700, color: '#F1F5F9' }}>
@@ -469,7 +615,9 @@ ${html.replace(/<!DOCTYPE[^>]*>/i,'').replace(/<html[^>]*>/i,'').replace(/<\/htm
           )}
         </div>
 
+        {/* Kanan: actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          {/* Auto run */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <span style={{ fontSize: 10, color: '#334155' }}>Auto</span>
             <div onClick={() => setAutoRun(v => !v)} style={{ width: 32, height: 18, borderRadius: 99, background: autoRun ? '#22D3EE' : '#1E2D3D', cursor: 'pointer', position: 'relative', transition: 'background .2s' }}>
@@ -477,6 +625,7 @@ ${html.replace(/<!DOCTYPE[^>]*>/i,'').replace(/<html[^>]*>/i,'').replace(/<\/htm
             </div>
           </div>
 
+          {/* Template */}
           <div style={{ position: 'relative' }}>
             <button onClick={() => setShowTemplates(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, border: '1px solid #1A2535', background: 'none', color: '#475569', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-inter)' }}>
               <Layout size={11} strokeWidth={1.75} /> Template
@@ -494,6 +643,7 @@ ${html.replace(/<!DOCTYPE[^>]*>/i,'').replace(/<html[^>]*>/i,'').replace(/<\/htm
             )}
           </div>
 
+          {/* My Projects */}
           <button onClick={() => setShowProjects(true)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, border: '1px solid #1A2535', background: 'none', color: '#475569', cursor: 'pointer', fontSize: 11 }}>
             <FolderOpen size={11} strokeWidth={1.75} /> Proyek
           </button>
@@ -506,6 +656,7 @@ ${html.replace(/<!DOCTYPE[^>]*>/i,'').replace(/<html[^>]*>/i,'').replace(/<\/htm
             <Download size={11} strokeWidth={1.75} />
           </button>
 
+          {/* Save / Quick Save */}
           {currentProject && isDirty ? (
             <button onClick={handleQuickSave} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 7, border: 'none', background: '#F59E0B', color: '#080F1C', cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-geist-mono)' }}>
               <Save size={11} strokeWidth={2.5} /> Simpan
@@ -522,22 +673,44 @@ ${html.replace(/<!DOCTYPE[^>]*>/i,'').replace(/<html[^>]*>/i,'').replace(/<\/htm
         </div>
       </div>
 
+      {/* ── Main layout ── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
+        {/* Editor */}
         {!previewFull && (
           <div style={{ width: '50%', flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid #1A2535' }}>
             <div style={{ display: 'flex', background: '#080F1C', borderBottom: '1px solid #1A2535', flexShrink: 0 }}>
-              {(['html', 'css', 'js'] as const).map(tab => (
+              {(['html', 'css', 'js', 'python'] as const).map(tab => (
                 <button key={tab} onClick={() => setActiveTab(tab)} style={{ padding: '9px 20px', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-geist-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', background: activeTab === tab ? '#070D1A' : 'transparent', color: activeTab === tab ? TAB_COLOR[tab] : '#334155', borderBottom: `2px solid ${activeTab === tab ? TAB_COLOR[tab] : 'transparent'}`, transition: 'all .15s' }}>
                   {tab}
                 </button>
               ))}
             </div>
-            <CodeEditor value={values[activeTab]} onChange={v => { setters[activeTab](v); setIsDirty(true) }} />
+            {activeTab === 'python' ? (
+              <PythonEditor
+                value={python}
+                onChange={v => { setPython(v); setIsDirty(true) }}
+                onRun={async () => {
+                  setPyLoading(true); setPyOutput(''); setPyError('')
+                  const result = await runPython(python)
+                  setPyOutput(result.output)
+                  setPyError(result.error ?? result.stderr ?? '')
+                  setPyLoading(false)
+                }}
+                output={pyOutput}
+                error={pyError}
+                loading={pyLoading}
+                ready={pyReady}
+              />
+            ) : (
+              <CodeEditor value={values[activeTab]} onChange={v => { setters[activeTab](v); setIsDirty(true) }} />
+            )}
           </div>
         )}
 
+        {/* Preview + Console */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Preview */}
           <div style={{ flex: previewFull ? 1 : '0 0 60%', display: 'flex', flexDirection: 'column', borderBottom: previewFull ? 'none' : '1px solid #1A2535' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 13px', background: '#080F1C', borderBottom: '1px solid #1A2535', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -551,6 +724,7 @@ ${html.replace(/<!DOCTYPE[^>]*>/i,'').replace(/<html[^>]*>/i,'').replace(/<\/htm
             <iframe key={runKey} srcDoc={srcDoc} sandbox="allow-scripts allow-same-origin" style={{ flex: 1, border: 'none', background: '#fff' }} title="preview" />
           </div>
 
+          {/* Console */}
           {!previewFull && (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 13px', background: '#080F1C', borderBottom: '1px solid #1A2535', flexShrink: 0 }}>
@@ -583,6 +757,7 @@ ${html.replace(/<!DOCTYPE[^>]*>/i,'').replace(/<html[^>]*>/i,'').replace(/<\/htm
         </div>
       </div>
 
+      {/* ── Modals ── */}
       {showTemplates && <div style={{ position: 'fixed', inset: 0, zIndex: 10 }} onClick={() => setShowTemplates(false)} />}
 
       {showSave && (
