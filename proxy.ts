@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-const PROTECTED_ROUTES = ['/adventure', '/community', '/workshop', '/leaderboard', '/profile', '/settings']
+const PROTECTED_ROUTES = ['/adventure', '/community', '/workshop', '/leaderboard', '/profile', '/settings', '/onboarding']
 const ADMIN_ROUTES     = ['/admin']
 const PUBLIC_ROUTES    = ['/login', '/register', '/api/auth', '/api/regions']
 
@@ -62,9 +62,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  if (pathname.startsWith('/onboarding')) return response
 
-  if (isProtected && user) {
+  if (isProtected && user && !pathname.startsWith('/onboarding')) {
     const { data: profile } = await supabase
       .from('profiles').select('hero_class').eq('id', user.id).single()
     if (!profile?.hero_class) {

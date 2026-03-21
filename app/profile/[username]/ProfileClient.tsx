@@ -272,7 +272,7 @@ export default function ProfileClient({ profile, stats, userBadges, streaks, mem
                         background: `${r.color}15`, border: `1px solid ${r.color}33`,
                         fontSize: 11, color: r.color,
                       }}>
-                        <span>{ub.badge.icon_url ?? '✦'}</span>
+                        <span>{ub.badge.icon_url ? <span dangerouslySetInnerHTML={{__html:ub.badge.icon_url}}/> : ub.badge.name[0]}</span>
                         <span style={{ fontWeight: 600 }}>{ub.badge.name}</span>
                       </div>
                     )

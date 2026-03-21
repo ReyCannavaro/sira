@@ -15,7 +15,6 @@ interface Stats { current_level: number; total_exp: number }
 interface Badge { id: string; slug: string; name: string; description: string; category: string; rarity: string; icon_url: string | null }
 interface UserBadge { id: string; earned_at: string; is_featured: boolean; badge: Badge }
 
-// Shape Supabase joined query — badge bisa array atau object
 interface SupabaseBadgeRow {
   id: string; earned_at: string; is_featured: boolean;
   badge: Badge | Badge[] | null;
@@ -465,7 +464,7 @@ export default function SettingsPage() {
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 17,
                     }}>
-                      {ub.badge.icon_url ?? '★'}
+                      {ub.badge.icon_url ? <div style={{width:36,height:36}} dangerouslySetInnerHTML={{__html:ub.badge.icon_url}}/> : <span style={{fontFamily:'var(--font-geist-mono)',fontWeight:700,fontSize:14,color:col}}>{ub.badge.name[0]}</span>}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: 12, fontWeight: 600, color: '#F1F5F9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
