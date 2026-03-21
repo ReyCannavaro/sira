@@ -94,7 +94,7 @@ export interface Quest {
   is_active:              boolean;
 }
 
-export type QuestNodeStatus = "locked" | "active" | "completed";
+export type QuestNodeStatus = "locked" | "active" | "completed" | "done";
 
 export interface QuestMapData {
   id:           string;

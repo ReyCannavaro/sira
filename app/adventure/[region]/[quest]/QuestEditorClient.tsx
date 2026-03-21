@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Lightbulb, Play, RotateCcw, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 
-/* ─── Types ── */
 interface Quest {
   id: string; slug: string; title: string;
   story_intro: string | null; instructions: string;
@@ -23,11 +22,9 @@ interface LastAttempt {
 }
 
 type FeedbackStatus = "syntax_error" | "logic_error" | "passed_dirty" | "passed_clean" | null;
-
 const DIFF_LABEL: Record<string, string> = { easy: "Mudah", normal: "Normal", hard: "Sulit", expert: "Expert" };
 const DIFF_COLOR: Record<string, string> = { easy: "#34D399", normal: "#22D3EE", hard: "#A78BFA", expert: "#F59E0B" };
 
-/* ─── NeonBadge ── */
 function NeonBadge({ children, color = "#22D3EE" }: { children: React.ReactNode; color?: string }) {
   return (
     <span style={{
@@ -41,24 +38,18 @@ function NeonBadge({ children, color = "#22D3EE" }: { children: React.ReactNode;
   );
 }
 
-/* ─── Simple Code Editor (textarea-based) ── */
 function CodeEditor({ value, onChange, language, disabled }: {
   value: string; onChange: (v: string) => void;
   language: string; disabled?: boolean;
 }) {
   const taRef   = useRef<HTMLTextAreaElement>(null);
   const lineRef = useRef<HTMLDivElement>(null);
-
-  /* sync scroll antara textarea dan line numbers */
   const syncScroll = useCallback(() => {
     if (taRef.current && lineRef.current) {
       lineRef.current.scrollTop = taRef.current.scrollTop;
     }
   }, []);
-
   const lines = value.split("\n").length;
-
-  /* Tab key support */
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Tab") {
       e.preventDefault();
@@ -79,7 +70,6 @@ function CodeEditor({ value, onChange, language, disabled }: {
       background: "#070D1A", borderRadius: 10,
       border: "1px solid #1A2535", fontFamily: "var(--font-jetbrains-mono)",
     }}>
-      {/* Line numbers */}
       <div ref={lineRef} style={{
         width: 44, flexShrink: 0, overflowY: "hidden",
         background: "#080F1C", borderRight: "1px solid #1A2535",
@@ -96,7 +86,6 @@ function CodeEditor({ value, onChange, language, disabled }: {
         ))}
       </div>
 
-      {/* Code textarea */}
       <textarea
         ref={taRef}
         value={value}
@@ -121,7 +110,6 @@ function CodeEditor({ value, onChange, language, disabled }: {
   );
 }
 
-/* ─── Feedback panel ── */
 function FeedbackPanel({ status, text, expEarned, isRetry }: {
   status: FeedbackStatus; text: string; expEarned?: number; isRetry: boolean;
 }) {
@@ -136,7 +124,6 @@ function FeedbackPanel({ status, text, expEarned, isRetry }: {
 
   if (!cfg) return null;
 
-  // React requires capitalized variable to render dynamic component
   const StatusIcon = cfg.Icon;
 
   return (
@@ -166,7 +153,6 @@ function FeedbackPanel({ status, text, expEarned, isRetry }: {
   );
 }
 
-/* ─── Main Editor Client ── */
 export default function QuestEditorClient({ quest, region, lastAttempt, isFirstPass, userId, nextQuest }: {
   quest: Quest; region: Region; lastAttempt: LastAttempt | null;
   isFirstPass: boolean; userId: string;
@@ -183,20 +169,12 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
   const [startTime]                     = useState(Date.now());
   const [output,       setOutput]       = useState<string | null>(null);
   const isRetry = !isFirstPass;
-
-  /* ── Submit quest ── */
-  /* ── Jalankan kode JavaScript di client (browser sandbox) ── */
-  /* ── Deteksi apakah kode adalah HTML ── */
   const isHTMLCode = (src: string) => {
     const trimmed = src.trim().toLowerCase();
     return trimmed.startsWith("<!doctype") || trimmed.startsWith("<html") || trimmed.startsWith("<head") || trimmed.startsWith("<body");
   };
-
-  /* ── Normalize HTML untuk comparison (hapus whitespace antar tag) ── */
   const normalizeHTML = (src: string) =>
     src.trim().replace(/\s+/g, " ").replace(/> </g, "><").replace(/\n/g, "").replace(/  +/g, " ");
-
-  /* ── Jalankan JavaScript di browser ── */
   const runJavaScript = (src: string): { output: string; hadSyntaxError: boolean } => {
     const logs: string[] = [];
     const fakeConsole = {
@@ -205,7 +183,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
       warn:  (...a: unknown[]) => logs.push(a.map(String).join(" ")),
     };
     try {
-      // eslint-disable-next-line no-new-func
       const fn = new Function("console", src);
       fn(fakeConsole);
       return { output: logs.join("\n"), hadSyntaxError: false };
@@ -222,13 +199,9 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
     setOutput(null);
 
     const durationSec = Math.round((Date.now() - startTime) / 1000);
-
-    /* ── 1. Eksekusi / evaluate kode di client ── */
     let actualOutput    = "";
     let hadSyntaxError  = false;
-
     if (isHTMLCode(code)) {
-      // HTML: tidak dieksekusi — kirim kode mentah ke server, server yang normalize & compare
       actualOutput   = code;
       hadSyntaxError = false;
       setOutput(null);
@@ -238,10 +211,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
       hadSyntaxError = result.hadSyntaxError;
       setOutput(actualOutput || null);
     }
-    // Python: output kosong, server handle
-
     try {
-      /* ── 2. Kirim hasil ke server untuk disimpan & dinilai ── */
       const res  = await fetch("/api/quests/submit", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -281,7 +251,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
     }
   };
 
-  /* ── Request hint ── */
   const handleHint = () => {
     const hint = quest.hints[hintsUsed];
     if (!hint) return;
@@ -295,8 +264,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
 
   return (
     <div style={{ minHeight: "100vh", background: "#0A1220", color: "#F8FAFC", display: "flex", flexDirection: "column" }}>
-
-      {/* ── Top bar ── */}
       <div style={{
         height: 52, flexShrink: 0,
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -305,7 +272,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
         backdropFilter: "blur(16px)",
         borderBottom: "1px solid #1A2535",
       }}>
-        {/* Left: back + breadcrumb */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button onClick={() => router.push("/adventure")} style={{
             display: "flex", alignItems: "center", gap: 6,
@@ -339,7 +305,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
           )}
         </div>
 
-        {/* Right: badges + actions */}
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <NeonBadge color={DIFF_COLOR[quest.difficulty] ?? "#94A3B8"}>
             {DIFF_LABEL[quest.difficulty] ?? quest.difficulty}
@@ -354,16 +319,12 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
         </div>
       </div>
 
-      {/* ── Body: 2 panel ── */}
       <div style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
-
-        {/* Left: instruksi */}
         <div style={{
           width: 380, flexShrink: 0, display: "flex", flexDirection: "column",
           borderRight: "1px solid #1A2535", overflowY: "auto",
           background: "#090F1D",
         }}>
-          {/* Story intro */}
           {quest.story_intro && (
             <div style={{
               margin: "16px 16px 0", padding: "12px 14px", borderRadius: 10,
@@ -375,7 +336,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
             </div>
           )}
 
-          {/* Instructions */}
           <div style={{ padding: "16px 16px 0" }}>
             <p style={{ fontSize: 10, color: "#334155", fontFamily: "var(--font-geist-mono)", letterSpacing: "0.1em", marginBottom: 10 }}>
               INSTRUKSI
@@ -385,7 +345,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
             </div>
           </div>
 
-          {/* Expected output */}
           {quest.expected_output && (
             <div style={{ padding: "16px 16px 0" }}>
               <p style={{ fontSize: 10, color: "#334155", fontFamily: "var(--font-geist-mono)", letterSpacing: "0.1em", marginBottom: 8 }}>
@@ -402,7 +361,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
             </div>
           )}
 
-          {/* EXP info */}
           <div style={{ padding: "14px 16px 0" }}>
             <div style={{ padding: "10px 12px", borderRadius: 9, background: "#0B1524", border: "1px solid #1A2535" }}>
               {isRetry ? (
@@ -420,7 +378,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
             </div>
           </div>
 
-          {/* Hint yang sedang tampil */}
           {hintVisible && (
             <div style={{ padding: "14px 16px 0" }}>
               <div style={{
@@ -437,15 +394,10 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
               </div>
             </div>
           )}
-
-          {/* Spacer */}
           <div style={{ flex: 1, minHeight: 20 }} />
         </div>
 
-        {/* Right: editor + output */}
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-
-          {/* Editor area */}
           <div style={{ flex: 1, minHeight: 0, padding: "12px 12px 0", display: "flex", flexDirection: "column", gap: 8 }}>
             <CodeEditor
               value={code}
@@ -455,10 +407,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
             />
           </div>
 
-          {/* Bottom: output + feedback + actions */}
           <div style={{ padding: "10px 12px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
-
-            {/* Execution output */}
             {output !== null && (
               <div style={{
                 padding: "10px 12px", borderRadius: 9,
@@ -473,7 +422,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
               </div>
             )}
 
-            {/* Feedback panel */}
             {feedback && (
               <FeedbackPanel
                 status={feedback.status}
@@ -483,22 +431,18 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
               />
             )}
 
-            {/* ── Passed + ada next quest: banner celebration ── */}
             {passed && nextQuest ? (
               <div style={{
                 borderRadius: 12, overflow: "hidden",
                 border: `1px solid ${regionColor}33`,
                 animation: "feedback-up .3s ease",
               }}>
-                {/* Top shimmer line */}
                 <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${regionColor}, transparent)` }} />
-
                 <div style={{
                   padding: "14px 16px",
                   background: `linear-gradient(135deg, ${regionColor}10 0%, ${regionColor}06 100%)`,
                   display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
                 }}>
-                  {/* Left: info quest berikutnya */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{
                       fontSize: 10, color: `${regionColor}88`,
@@ -530,9 +474,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
                     </div>
                   </div>
 
-                  {/* Right: tombol */}
                   <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
-                    {/* Coba lagi */}
                     <button
                       onClick={handleSubmit}
                       disabled={submitting}
@@ -549,7 +491,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
                       <RotateCcw size={13} strokeWidth={2} />
                     </button>
 
-                    {/* Next quest */}
                     <button
                       onClick={() => router.push(`/adventure/${region.slug}/${nextQuest.slug}`)}
                       style={{
@@ -579,7 +520,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
                 </div>
               </div>
             ) : (
-              /* ── Action row normal ── */
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {/* Reset code */}
                 <button onClick={() => { setCode(quest.starter_code ?? ""); setFeedback(null); setOutput(null); }}
@@ -596,7 +536,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
                   <RotateCcw size={13} strokeWidth={2} />
                 </button>
 
-                {/* Hint */}
                 <button
                   onClick={handleHint}
                   disabled={hintsLeft === 0}
@@ -615,7 +554,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
                   Hint ({hintsLeft})
                 </button>
 
-                {/* Submit */}
                 <button
                   onClick={handleSubmit}
                   disabled={submitting || !code.trim()}

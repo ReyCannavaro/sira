@@ -9,20 +9,14 @@ interface Props {
 export default async function QuestPage({ params }: Props) {
   const { region, quest: questSlug } = await params;
   const supabase = await createSupabaseServerClient();
-
-  /* ── Auth ── */
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) notFound();
-
-  /* ── Region ── */
   const { data: regionData } = await supabase
     .from("regions")
     .select("id, name, accent_color, slug")
     .eq("slug", region)
     .single();
   if (!regionData) notFound();
-
-  /* ── Quest ── */
   const { data: questData } = await supabase
     .from("quests")
     .select("id, slug, title, story_intro, instructions, language, starter_code, expected_output, test_cases, hints, difficulty, exp_reward, order_index, prerequisite_quest_id")
@@ -31,8 +25,6 @@ export default async function QuestPage({ params }: Props) {
     .eq("is_active", true)
     .single();
   if (!questData) notFound();
-
-  /* ── Prerequisite check ── */
   if (questData.prerequisite_quest_id) {
     const { data: prereqAttempt } = await supabase
       .from("quest_attempts")
@@ -45,7 +37,6 @@ export default async function QuestPage({ params }: Props) {
     if (!prereqAttempt) notFound();
   }
 
-  /* ── Previous attempt ── */
   const { data: lastAttempt } = await supabase
     .from("quest_attempts")
     .select("submitted_code, status, exp_earned, correctness_score, efficiency_score, socratic_feedback")
@@ -55,7 +46,6 @@ export default async function QuestPage({ params }: Props) {
     .limit(1)
     .single();
 
-  /* ── Sudah pernah passed? ── */
   const { count: passedCount } = await supabase
     .from("quest_attempts")
     .select("id", { count: "exact", head: true })
@@ -65,7 +55,6 @@ export default async function QuestPage({ params }: Props) {
 
   const isFirstPass = (passedCount ?? 0) === 0;
 
-  /* ── Quest berikutnya (order_index + 1 di region yang sama) ── */
   const { data: nextQuestData } = await supabase
     .from("quests")
     .select("slug, title, difficulty, exp_reward")

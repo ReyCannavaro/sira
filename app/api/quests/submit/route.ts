@@ -2,7 +2,6 @@ import { NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ok, badRequest, unauthorized, serverError } from "@/lib/api/response";
 
-/* ─── Clean Code Score (tanpa AST execution) ─────────────────────────────── */
 function calcCleanCodeScore(code: string): number {
   let score = 100;
   const lines = code.split("\n").filter(l => l.trim().length > 0);
@@ -10,7 +9,6 @@ function calcCleanCodeScore(code: string): number {
   if (lines.length > 30) score -= 20;
   else if (lines.length > 20) score -= 10;
 
-  // Nama variabel terlalu pendek
   const shortVarMatches = code.match(/\b(?:let|var|const)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\b/g) ?? [];
   const allowed = new Set(["i", "j", "k", "n", "x", "y", "a", "b"]);
   let badVarCount = 0;
@@ -21,7 +19,6 @@ function calcCleanCodeScore(code: string): number {
   }
   score -= badVarCount * 10;
 
-  // Nesting depth
   let maxDepth = 0, depth = 0;
   for (const ch of code) {
     if (ch === "{") { depth++; if (depth > maxDepth) maxDepth = depth; }
@@ -33,7 +30,6 @@ function calcCleanCodeScore(code: string): number {
   return Math.max(0, Math.min(100, score));
 }
 
-/* ─── Socratic feedback ───────────────────────────────────────────────────── */
 function buildFeedback(
   status: string,
   actualOutput: string,
@@ -62,7 +58,6 @@ function buildFeedback(
   return "";
 }
 
-/* ─── POST /api/quests/submit ─────────────────────────────────────────────── */
 export async function POST(request: NextRequest) {
   const supabase = await createSupabaseServerClient();
 
@@ -76,8 +71,8 @@ export async function POST(request: NextRequest) {
     duration_sec:     number;
     language:         string;
     expected_output:  string;
-    actual_output:    string;   // ← client sudah jalankan kode, kirim hasilnya
-    had_syntax_error: boolean;  // ← client tahu ada syntax error
+    actual_output:    string;
+    had_syntax_error: boolean;
     test_cases:       { input: string; expected_output: string }[];
   };
 
@@ -96,7 +91,6 @@ export async function POST(request: NextRequest) {
     return badRequest("quest_id dan submitted_code wajib diisi");
   }
 
-  /* ── Cek first pass ── */
   const { count: passedCount } = await supabase
     .from("quest_attempts")
     .select("id", { count: "exact", head: true })
@@ -105,12 +99,9 @@ export async function POST(request: NextRequest) {
     .in("status", ["passed_clean", "passed_dirty"]);
   const isFirstPass = (passedCount ?? 0) === 0;
 
-  /* ── Tentukan status dari hasil eksekusi client ── */
-  // Normalize teks biasa (JS output)
   const normalize = (s: string) =>
     (s ?? "").trim().replace(/\r\n/g, "\n").replace(/[ \t]+$/gm, "");
 
-  // Normalize HTML: hapus whitespace berlebih, lowercase, hapus atribut whitespace
   const normalizeHTML = (s: string) =>
     (s ?? "").trim()
       .replace(/\r\n|\n|\r/g, "")
@@ -119,20 +110,17 @@ export async function POST(request: NextRequest) {
       .replace(/ >/g, ">")
       .toLowerCase();
 
-  // Ekstrak konten dalam <body> jika ada, fallback ke seluruh string
   const extractBody = (s: string): string => {
     const lower = s.toLowerCase();
     const start = lower.indexOf("<body");
     const end   = lower.lastIndexOf("</body>");
     if (start !== -1 && end !== -1) {
-      // ambil konten dalam body tag (skip tag <body ...> itu sendiri)
       const bodyTagEnd = s.indexOf(">", start);
       return s.slice(bodyTagEnd + 1, end).trim();
     }
     return s;
   };
 
-  // Deteksi HTML quest: expected dimulai dengan tag HTML atau tag heading/block
   const htmlTags = ["<!doctype", "<html", "<h1", "<h2", "<h3", "<h4", "<h5", "<h6", "<p", "<div", "<ul", "<ol", "<table", "<form", "<header", "<nav", "<main", "<section", "<article", "<footer"];
   const expectedTrimmed = expected_output?.trim().toLowerCase() ?? "";
   const isHTMLQuest = htmlTags.some(tag => expectedTrimmed.startsWith(tag));
