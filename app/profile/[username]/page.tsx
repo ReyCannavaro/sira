@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import ProfileClient from './ProfileClient'
 
-// Type alias untuk Supabase joined query results
+type Badge         = { id: string; slug: string; name: string; description: string; category: string; rarity: string; icon_url: string | null }
+type UserBadge     = { id: string; earned_at: string; is_featured: boolean; badge: Badge }
 type Membership    = { role: string; community: { id: string; name: string; type: string; weekly_exp_total: number; squad_war_rank: number | null } }
 type RecentAttempt = { id: string; exp_earned: number; status: string; created_at: string; quest: { title: string; difficulty: string } }
 
@@ -29,12 +30,10 @@ export default async function ProfilePage({ params }: { params: Promise<{ userna
 
   if (!profile) notFound()
 
-  /* ── Auth check ── */
   const { data: { user: authUser } } = await supabase.auth.getUser()
   const isOwner = authUser?.id === profile.id
   if (!profile.is_public && !isOwner) notFound()
 
-  /* ── Fetch semua data secara parallel ── */
   const [statsRes, badgesRes, streaksRes, membershipsRes, attemptsRes] = await Promise.all([
     supabase
       .from('user_stats')
@@ -69,14 +68,22 @@ export default async function ProfilePage({ params }: { params: Promise<{ userna
       .limit(10),
   ])
 
+  const rawBadges = (badgesRes.data ?? []) as unknown as Array<{
+    id: string; earned_at: string; is_featured: boolean;
+    badge: Badge | Badge[] | null;
+  }>
+  const userBadges: UserBadge[] = rawBadges
+    .map(b => ({ ...b, badge: Array.isArray(b.badge) ? b.badge[0] : b.badge }))
+    .filter(b => b.badge != null) as UserBadge[]
+
   return (
     <ProfileClient
       profile={profile}
       stats={statsRes.data ?? null}
-      userBadges={badgesRes.data ?? []}
+      userBadges={userBadges}
       streaks={streaksRes.data ?? []}
-      memberships={(membershipsRes.data ?? []) as Membership[]}
-      recentAttempts={(attemptsRes.data ?? []) as RecentAttempt[]}
+      memberships={(membershipsRes.data ?? []) as unknown as Membership[]}
+      recentAttempts={(attemptsRes.data ?? []) as unknown as RecentAttempt[]}
       isOwner={isOwner}
     />
   )
