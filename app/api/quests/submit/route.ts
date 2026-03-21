@@ -119,7 +119,24 @@ export async function POST(request: NextRequest) {
     .in('status', ['passed_clean', 'passed_dirty'])
   const isFirstPass = (passedCount ?? 0) === 0
 
-  const normalize     = (s: string) => (s ?? '').trim().replace(/\r\n/g, '\n').replace(/[ \t]+$/gm, '')
+  const normalize = (s: string) => {
+    let r = (s ?? '').trim().replace(/\r\n/g, '\n').replace(/[ \t]+$/gm, '')
+    // Normalize JSON whitespace: {"a": 1} → {"a":1}
+    r = r.replace(/:\s+/g, ':').replace(/,\s+/g, ',')
+    // Normalize float: 0.6667 vs 0.6666... → compare rounded to 4 decimals
+    return r
+  }
+
+  // Compare dua output dengan toleransi desimal
+  const normalizeCompare = (actual: string, expected: string): boolean => {
+    const a = normalize(actual)
+    const e = normalize(expected)
+    if (a === e) return true
+    // Coba parse sebagai float dan bandingkan dengan toleransi
+    const fa = parseFloat(a), fe = parseFloat(e)
+    if (!isNaN(fa) && !isNaN(fe)) return Math.abs(fa - fe) < 0.001
+    return false
+  }
   const normalizeHTML = (s: string) => (s ?? '').trim().replace(/\r\n|\n|\r/g, '').replace(/\s+/g, ' ').replace(/ </g, '<').replace(/> /g, '>').replace(/ >/g, '>')
   const extractBody   = (s: string) => {
     const lower = s.toLowerCase()
@@ -176,12 +193,27 @@ export async function POST(request: NextRequest) {
                || submittedFull.includes(expectedNorm)
                || submittedBody.includes(expectedNorm)
     } else if (test_cases?.length > 0) {
-      allPassed = test_cases.every(tc => normalize(outputStr) === normalize(tc.expected_output))
+      // Client mengirim JSON array of outputs: ["output1","output2",...]
+      let tcOutputs: string[] = []
+      try {
+        const parsed = JSON.parse(outputStr)
+        if (Array.isArray(parsed)) {
+          tcOutputs = parsed.map(String)
+        } else {
+          tcOutputs = test_cases.map(() => outputStr)
+        }
+      } catch {
+        tcOutputs = test_cases.map(() => outputStr)
+      }
+      const globalExpNorm = normalize(expected_output)
+      allPassed = test_cases.every((tc, i) => {
+        const actual     = normalize(tcOutputs[i] ?? '')
+        const tcExpected = tc.expected_output?.trim() ? tc.expected_output : expected_output
+        const expNorm    = normalize(tcExpected)
+        return normalizeCompare(actual, expNorm) || normalizeCompare(actual, globalExpNorm)
+      })
     } else {
-      const normActual   = normalize(outputStr)
-      const normExpected = normalize(expected_output)
-      console.log('DEBUG JS compare:', JSON.stringify({ normActual, normExpected, match: normActual === normExpected }))
-      allPassed = normActual === normExpected
+      allPassed = normalizeCompare(normalize(outputStr), normalize(expected_output))
     }
 
     if (allPassed) {

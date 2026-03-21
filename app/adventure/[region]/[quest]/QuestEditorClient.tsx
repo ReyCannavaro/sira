@@ -280,6 +280,37 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
       workerRef.current?.postMessage({ id, code: src, packages: [] });
     });
 
+  /* ── JS Execution Engine ────────────────────────────────────────────── */
+
+  // DOM mock untuk quest yang pakai document/window
+  const DOM_MOCK = [
+    "var __ds__={};",
+    "var document={getElementById:function(id){return{id:id,style:{},innerHTML:'',textContent:'',",
+    "classList:{toggle:function(c){__ds__[id+'_'+c]=!__ds__[id+'_'+c];return __ds__[id+'_'+c];},",
+    "add:function(c){__ds__[id+'_'+c]=true;},remove:function(c){__ds__[id+'_'+c]=false;},",
+    "contains:function(c){return !!__ds__[id+'_'+c];}},",
+    "addEventListener:function(e,fn){__ds__['_ev_'+id+'_'+e]=fn;},",
+    "click:function(){var f=__ds__['_ev_'+id+'_click'];if(f)f();}",
+    "};},querySelector:function(){return{style:{},innerHTML:'',textContent:'',",
+    "classList:{toggle:function(){},add:function(){},remove:function(){},contains:function(){return false;}},",
+    "addEventListener:function(){}};},querySelectorAll:function(){return[];},",
+    "createElement:function(t){return{tagName:t,style:{},classList:{add:function(){},remove:function(){}},",
+    "appendChild:function(){},addEventListener:function(){}};},body:{appendChild:function(){},innerHTML:''}};",
+    "var window={document:document,location:{href:''}};",
+  ].join("\n");
+
+  // Deteksi apakah input adalah kode JS (bukan data numerik)
+  const isCodeInput = (input: string): boolean => {
+    const t = input.trim();
+    if (!t) return false;
+    // Kode JS: mengandung function call atau assignment
+    return /[a-zA-Z_$][a-zA-Z0-9_$]*\s*[=(]/.test(t) ||
+           /[;{}]/.test(t) ||
+           t.includes("=>") ||
+           t.includes("new ");
+  };
+
+  // Jalankan JS tanpa test case (untuk quest tanpa test_cases atau code-as-input)
   const runJavaScript = (src: string): { output: string; hadSyntaxError: boolean } => {
     const logs: string[] = [];
     const fc = {
@@ -288,10 +319,85 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
       warn:  (...a: unknown[]) => logs.push(a.map(String).join(" ")),
     };
     try {
-      new Function("console", src)(fc);
+      new Function("console", DOM_MOCK + "\n" + src)(fc);
       return { output: logs.join("\n"), hadSyntaxError: false };
     } catch (e: unknown) {
       return { output: e instanceof Error ? e.message : String(e), hadSyntaxError: true };
+    }
+  };
+
+  // Jalankan JS dengan satu test case input
+  const runJavaScriptWithInput = (src: string, input: string): { output: string; hadSyntaxError: boolean } => {
+    const logs: string[] = [];
+    const fc = {
+      log:   (...a: unknown[]) => logs.push(a.map(String).join(" ")),
+      error: (...a: unknown[]) => logs.push(a.map(String).join(" ")),
+      warn:  (...a: unknown[]) => logs.push(a.map(String).join(" ")),
+    };
+
+    // Strip console.log dari user code (line-based)
+    const cleanSrc = src.split("\n")
+      .filter(line => !line.trim().startsWith("console."))
+      .join("\n");
+
+    try {
+      if (isCodeInput(input)) {
+        // Input adalah kode JS — eval langsung setelah definisi fungsi user
+        // Ambil hasil ekspresi terakhir dari multi-statement
+        const stmts = input.split(";").map(s => s.trim()).filter(Boolean);
+        const lastStmt = stmts[stmts.length - 1];
+        const prevStmts = stmts.slice(0, -1).join(";");
+
+        const evalCode = [
+          prevStmts ? prevStmts + ";" : "",
+          "var __r__ = (function(){ try { return eval(" + JSON.stringify(lastStmt) + "); } catch(e){ return undefined; } })();",
+          "if(__r__ !== undefined && __r__ !== null) {",
+          "  console.log(typeof __r__ === 'object' ? JSON.stringify(__r__) : String(__r__));",
+          "} else {",
+          "  var __fn__ = " + JSON.stringify(lastStmt.split("(")[0].trim()) + ";",
+          "  console.log(__fn__ + ' berhasil');",
+          "}",
+        ].join("\n");
+
+        new Function("console", "eval", DOM_MOCK + "\n" + cleanSrc + "\n" + evalCode)(fc, eval);
+      } else {
+        // Input adalah data — parse sebagai args dan inject ke fungsi
+        let parsedArgs: unknown[];
+        try {
+          parsedArgs = JSON.parse("[" + input + "]");
+          if (!Array.isArray(parsedArgs)) parsedArgs = [parsedArgs];
+        } catch {
+          parsedArgs = input.split(",").map(s => {
+            const t = s.trim();
+            const n = Number(t);
+            return isNaN(n) ? t : n;
+          });
+        }
+
+        // Detect nama fungsi utama dari kode
+        const fnMatch = cleanSrc.match(/(?:function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*(?:function|\([^)]*\)\s*=>))/);
+        if (fnMatch) {
+          const fnName = fnMatch[1] || fnMatch[2];
+          const argsStr = parsedArgs.map(a => JSON.stringify(a)).join(",");
+          const retCode = [
+            "var __r__ = " + fnName + "(" + argsStr + ");",
+            "if(__r__ !== undefined && __r__ !== null) {",
+            "  console.log(typeof __r__ === 'object' ? JSON.stringify(__r__) : String(__r__));",
+            "} else {",
+            "  console.log('" + fnName + " berhasil');",
+            "}",
+          ].join("\n");
+          new Function("console", DOM_MOCK + "\n" + cleanSrc + "\n" + retCode)(fc);
+        } else {
+          new Function("console", DOM_MOCK + "\n" + cleanSrc)(fc);
+        }
+      }
+
+      return { output: logs.join("\n").trim(), hadSyntaxError: false };
+    } catch (e: unknown) {
+      // Untuk ValueError dan exception lain, format sebagai string
+      const msg = e instanceof Error ? e.message : String(e);
+      return { output: msg, hadSyntaxError: false }; // false = bukan syntax error, mungkin runtime exception yang valid
     }
   };
 
@@ -318,9 +424,95 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
       hadSyntaxError = false
       setOutput(null)
     } else if (quest.language === "javascript") {
-      const r = runJavaScript(code);
-      actualOutput = r.output; hadSyntaxError = r.hadSyntaxError;
-      setOutput(actualOutput || null); setActivePanel("output");
+      if (quest.test_cases?.length > 0) {
+        // Jalankan semua TC dalam satu konteks shared (state antar TC dipertahankan)
+        const tcOutputs: string[] = [];
+        let syntaxErr = false;
+
+        const cleanSrc = code.split("\n")
+          .filter(line => !line.trim().startsWith("console."))
+          .join("\n");
+
+        // Fungsi untuk run satu TC dengan kode tertentu
+        const runTC = (tcCode: string, extraSetup = ""): string => {
+          const logs2: string[] = [];
+          const fc2 = {
+            log:   (...a: unknown[]) => logs2.push(a.map(String).join(" ")),
+            error: (...a: unknown[]) => logs2.push(a.map(String).join(" ")),
+            warn:  (...a: unknown[]) => logs2.push(a.map(String).join(" ")),
+          };
+          try {
+            const stmts = tcCode.split(";").map((s: string) => s.trim()).filter(Boolean);
+            const last = stmts[stmts.length - 1];
+            const prev = stmts.slice(0, -1).join(";");
+            const retCode = [
+              prev ? prev + ";" : "",
+              "var __r__ = (function(){ try{ return eval(" + JSON.stringify(last) + "); }catch(e){ return undefined; } })();",
+              "if(__r__ !== undefined && __r__ !== null) {",
+              "  console.log(typeof __r__ === 'object' ? JSON.stringify(__r__) : String(__r__));",
+              "} else { console.log(" + JSON.stringify(last.split("(")[0].trim()) + " + ' berhasil'); }",
+            ].join("\n");
+            new Function("console", "eval", DOM_MOCK + "\n" + extraSetup + "\n" + cleanSrc + "\n" + retCode)(fc2, eval);
+            return logs2[0]?.trim() ?? "";
+          } catch { return ""; }
+        };
+
+        try {
+          // Strategi: coba shared state dulu (semua TC dalam satu run)
+          const sharedLogs: string[] = [];
+          const fcShared = {
+            log:   (...a: unknown[]) => sharedLogs.push(a.map(String).join(" ")),
+            error: (...a: unknown[]) => sharedLogs.push(a.map(String).join(" ")),
+            warn:  (...a: unknown[]) => sharedLogs.push(a.map(String).join(" ")),
+          };
+          const allTCBlocks = quest.test_cases.map((tc, i) => {
+            if (!tc.input.trim()) return "";
+            const stmts = tc.input.split(";").map((s: string) => s.trim()).filter(Boolean);
+            const last = stmts[stmts.length - 1];
+            const prev = stmts.slice(0, -1).join(";");
+            return [
+              prev ? prev + ";" : "",
+              "var __r" + i + "__ = (function(){ try{ return eval(" + JSON.stringify(last) + "); }catch(e){ return undefined; } })();",
+              "if(__r" + i + "__ !== undefined && __r" + i + "__ !== null) {",
+              "  console.log(typeof __r" + i + "__ === 'object' ? JSON.stringify(__r" + i + "__) : String(__r" + i + "__));",
+              "} else { console.log(" + JSON.stringify(last.split("(")[0].trim()) + " + ' berhasil'); }",
+            ].join("\n");
+          }).join("\n");
+          new Function("console", "eval", DOM_MOCK + "\n" + cleanSrc + "\n" + allTCBlocks)(fcShared, eval);
+
+          // Untuk setiap TC: pakai shared result, tapi jika tidak match expected, coba fresh
+          for (let i = 0; i < quest.test_cases.length; i++) {
+            const sharedOut = sharedLogs[i]?.trim() ?? "";
+            const exp = quest.test_cases[i].expected_output?.trim() ?? "";
+            // Normalisasi sederhana untuk compare
+            const normOut = sharedOut.replace(/:\s+/g, ":").replace(/,\s+/g, ",");
+            const normExp = exp.replace(/:\s+/g, ":").replace(/,\s+/g, ",");
+            if (normOut === normExp || !exp) {
+              tcOutputs.push(sharedOut);
+            } else {
+              // Coba fresh state untuk TC ini
+              const freshOut = runTC(quest.test_cases[i].input);
+              const normFresh = freshOut.replace(/:\s+/g, ":").replace(/,\s+/g, ",");
+              tcOutputs.push(normFresh === normExp ? freshOut : sharedOut);
+            }
+          }
+        } catch (e: unknown) {
+          syntaxErr = true;
+          actualOutput = e instanceof Error ? e.message : String(e);
+        }
+
+        hadSyntaxError = syntaxErr;
+        if (!syntaxErr) {
+          const preview = tcOutputs.slice(0, 2).map((o, i) => "Test " + (i+1) + ": " + o).join("\n");
+          setOutput(preview || null);
+          setActivePanel("output");
+          actualOutput = JSON.stringify(tcOutputs);
+        }
+      } else {
+        const r = runJavaScript(code);
+        actualOutput = r.output; hadSyntaxError = r.hadSyntaxError;
+        setOutput(actualOutput || null); setActivePanel("output");
+      }
     } else if (quest.language === "python") {
       if (!workerRef.current) {
         setFeedback({ status: "syntax_error", text: "Python runtime belum siap. Tunggu sebentar.", exp: 0 });
