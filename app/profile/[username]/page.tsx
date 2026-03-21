@@ -21,7 +21,6 @@ export default async function ProfilePage({ params }: { params: Promise<{ userna
   const { username } = await params
   const supabase     = await createSupabaseServerClient()
 
-  /* ── Profil ── */
   const { data: profile } = await supabase
     .from('profiles')
     .select('id, username, display_name, avatar_url, hero_class, bio, is_public, created_at')
