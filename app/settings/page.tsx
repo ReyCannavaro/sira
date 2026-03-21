@@ -15,6 +15,17 @@ interface Stats { current_level: number; total_exp: number }
 interface Badge { id: string; slug: string; name: string; description: string; category: string; rarity: string; icon_url: string | null }
 interface UserBadge { id: string; earned_at: string; is_featured: boolean; badge: Badge }
 
+// Shape Supabase joined query — badge bisa array atau object
+interface SupabaseBadgeRow {
+  id: string; earned_at: string; is_featured: boolean;
+  badge: Badge | Badge[] | null;
+}
+function normalizeBadges(rows: SupabaseBadgeRow[]): UserBadge[] {
+  return rows
+    .map(r => ({ ...r, badge: Array.isArray(r.badge) ? r.badge[0] : r.badge }))
+    .filter(r => r.badge != null) as UserBadge[]
+}
+
 const RARITY_COLOR: Record<string, string> = {
   common: '#64748B', rare: '#22D3EE', epic: '#A78BFA', legendary: '#F59E0B'
 }
@@ -189,7 +200,7 @@ export default function SettingsPage() {
         setIsPublic(profRes.data.is_public ?? true)
       }
       setStats(statsRes.data)
-      setUserBadges((badgeRes.data ?? []) as UserBadge[])
+      setUserBadges(normalizeBadges((badgeRes.data ?? []) as SupabaseBadgeRow[]))
       setLoading(false)
     }
     load()

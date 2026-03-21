@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Lightbulb, Play, RotateCcw, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Lightbulb, Play, RotateCcw, CheckCircle, XCircle, AlertCircle, Zap, Flame } from "lucide-react";
 
 interface Quest {
   id: string; slug: string; title: string;
@@ -221,6 +221,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
       hadSyntaxError = result.hadSyntaxError;
       setOutput(actualOutput || null);
     }
+
     try {
       const res  = await fetch("/api/quests/submit", {
         method:  "POST",
@@ -273,7 +274,6 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
     }
   };
 
-  /* ── Request hint ── */
   const handleHint = () => {
     const hint = quest.hints[hintsUsed];
     if (!hint) return;
@@ -324,8 +324,9 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
                 width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
                 background: "rgba(52,211,153,0.15)", border: "1.5px solid #34D399",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 16,
-              }}>⚡</div>
+              }}>
+                <Zap size={16} color="#34D399" strokeWidth={1.75} />
+              </div>
               <div>
                 <p style={{ fontSize: 10, color: "#475569", marginBottom: 1 }}>EXP DIPEROLEH</p>
                 <p style={{ fontFamily: "var(--font-geist-mono)", fontSize: 22, fontWeight: 800, color: "#34D399", lineHeight: 1 }}>
@@ -335,7 +336,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
             </div>
             {expPopup.streak > 1 && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, paddingTop: 6, borderTop: "1px solid #1A2535" }}>
-                <div style={{ fontSize: 14 }}>🔥</div>
+                <Flame size={14} color="#F59E0B" strokeWidth={1.75} />
                 <div>
                   <span style={{ fontSize: 11, color: "#F59E0B", fontFamily: "var(--font-geist-mono)", fontWeight: 700 }}>
                     {expPopup.streak} hari berturut-turut!
@@ -401,6 +402,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
           </NeonBadge>
         </div>
       </div>
+
       <div style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
 
         <div style={{
@@ -477,10 +479,12 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
               </div>
             </div>
           )}
+
           <div style={{ flex: 1, minHeight: 20 }} />
         </div>
 
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
           <div style={{ flex: 1, minHeight: 0, padding: "12px 12px 0", display: "flex", flexDirection: "column", gap: 8 }}>
             <CodeEditor
               value={code}
@@ -491,6 +495,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
           </div>
 
           <div style={{ padding: "10px 12px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+
             {output !== null && (
               <div style={{
                 padding: "10px 12px", borderRadius: 9,

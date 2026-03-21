@@ -36,7 +36,7 @@ function XPBar({ current, max, color = "#22D3EE", h = 6 }: { current: number; ma
     <div style={{ width: "100%", background: "#1A2535", borderRadius: 999, height: h, overflow: "hidden" }}>
       <div style={{
         height: "100%", borderRadius: 999, transition: "width 1s cubic-bezier(.4,0,.2,1)",
-        width: `${Math.min((current / max) * 100, 100)}%`,
+        width: `${max > 0 ? Math.min((current / max) * 100, 100) : 0}%`,
         background: `linear-gradient(90deg, ${color}88, ${color})`,
         boxShadow: `0 0 6px ${color}55`,
       }} />
@@ -92,6 +92,7 @@ function RegionMap({ quests, color, selectedId, onSelect }: {
   return (
     <div style={{ overflowX: "auto", overflowY: "auto" }}>
       <div style={{ position: "relative", width: w, height: h, minWidth: w }}>
+
         <svg width={w} height={h}
           style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
           <defs>
@@ -105,6 +106,7 @@ function RegionMap({ quests, color, selectedId, onSelect }: {
           </defs>
 
           <rect width={w} height={h} fill={`url(#dotbg-${color.replace("#","")})`}/>
+
           {fullPoints && (
             <polyline points={fullPoints} fill="none"
               stroke={`${color}1a`} strokeWidth="3"
@@ -466,6 +468,7 @@ export default function AdventurePage() {
 
       <div style={{ paddingTop: 60 }}>
         <div style={{ maxWidth: 1400, margin: "0 auto", padding: "24px 24px 0" }}>
+
           <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18 }}>
             <div style={{ animation: "fade-up .4s ease both" }}>
               <h1 style={{ fontFamily: "var(--font-geist-mono)", fontSize: 22, fontWeight: 800, color: "#F1F5F9", marginBottom: 2 }}>
@@ -552,6 +555,7 @@ export default function AdventurePage() {
         </div>
 
         <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 24px 48px", display: "flex", gap: 16, alignItems: "flex-start" }}>
+
           <div style={{ flex: 1, minWidth: 0, background: "#080F1C", border: "1px solid #1A2535", borderRadius: 16 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 16px", borderBottom: "1px solid #1A2535" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -595,6 +599,7 @@ export default function AdventurePage() {
           </div>
 
           <div style={{ width: 284, flexShrink: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+
             {selectedQuest && (
               <QuestPanel
                 quest={selectedQuest}

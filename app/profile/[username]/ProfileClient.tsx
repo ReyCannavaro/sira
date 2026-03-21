@@ -19,6 +19,10 @@ interface Stats {
 }
 interface Badge { id: string; slug: string; name: string; description: string; category: string; rarity: string; icon_url: string | null }
 interface UserBadge { id: string; earned_at: string; is_featured: boolean; badge: Badge }
+interface SupabaseBadgeRow { id: string; earned_at: string; is_featured: boolean; badge: Badge | Badge[] | null }
+function normalizeBadges(rows: SupabaseBadgeRow[]): UserBadge[] {
+  return rows.map(r => ({ ...r, badge: Array.isArray(r.badge) ? r.badge[0] : r.badge })).filter(r => r.badge != null) as UserBadge[]
+}
 interface StreakDay { activity_date: string; quests_done: number; exp_earned: number }
 interface Membership { role: string; community: { id: string; name: string; type: string; weekly_exp_total: number; squad_war_rank: number | null } }
 interface RecentAttempt { id: string; exp_earned: number; status: string; created_at: string; quest: { title: string; difficulty: string } }

@@ -3,6 +3,10 @@ import { notFound } from 'next/navigation'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import ProfileClient from './ProfileClient'
 
+// Type alias untuk Supabase joined query results
+type Membership    = { role: string; community: { id: string; name: string; type: string; weekly_exp_total: number; squad_war_rank: number | null } }
+type RecentAttempt = { id: string; exp_earned: number; status: string; created_at: string; quest: { title: string; difficulty: string } }
+
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }): Promise<Metadata> {
   const { username } = await params
   return {
@@ -69,10 +73,10 @@ export default async function ProfilePage({ params }: { params: Promise<{ userna
     <ProfileClient
       profile={profile}
       stats={statsRes.data ?? null}
-      userBadges={(badgesRes.data ?? []) as any}
+      userBadges={badgesRes.data ?? []}
       streaks={streaksRes.data ?? []}
-      memberships={(membershipsRes.data ?? []) as any}
-      recentAttempts={(attemptsRes.data ?? []) as any}
+      memberships={(membershipsRes.data ?? []) as Membership[]}
+      recentAttempts={(attemptsRes.data ?? []) as RecentAttempt[]}
       isOwner={isOwner}
     />
   )

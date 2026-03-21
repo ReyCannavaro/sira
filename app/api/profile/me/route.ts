@@ -15,7 +15,6 @@ export async function GET() {
       id, username, display_name, avatar_url, hero_class, bio, is_public, created_at,
       user_stats (
         total_exp, current_level, weekly_exp, quests_completed,
-        str_score, int_score, agi_score,
         current_streak, longest_streak, last_active_date,
         hints_used_total, clean_code_avg
       )
