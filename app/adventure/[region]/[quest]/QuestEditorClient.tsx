@@ -305,16 +305,12 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
     let actualOutput   = "";
     let hadSyntaxError = false;
 
-    if (isHTML) {
-      // Normalize HTML: hapus semua whitespace antar tag sebelum compare
-      const normalizeForSubmit = (s: string) =>
-        s.trim()
-         .replace(/\r\n|\n|\r/g, '')
-         .replace(/\s+/g, ' ')
-         .replace(/ </g, '<')
-         .replace(/> /g, '>')
-         .replace(/ >/g, '>')
-      actualOutput = normalizeForSubmit(code)
+    // Deteksi CSS quest dari kode yang disubmit
+    const isCSSCode = /^[a-zA-Z*#.[\s]+\s*\{/.test(code.trim()) && !code.trim().startsWith('<')
+
+    if (isHTML || isCSSCode) {
+      // HTML/CSS: jangan execute, kirim langsung ke server
+      actualOutput   = code
       hadSyntaxError = false
       setOutput(null)
     } else if (quest.language === "javascript") {

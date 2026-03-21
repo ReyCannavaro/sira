@@ -129,22 +129,46 @@ export async function POST(request: NextRequest) {
     return s
   }
 
-  const htmlTags    = ['<!doctype','<html','<h1','<h2','<h3','<h4','<h5','<h6','<p','<div','<ul','<ol','<table','<form','<header','<nav','<main','<section','<article','<footer']
+  const htmlTags    = ['<!doctype','<html','<h1','<h2','<h3','<h4','<h5','<h6','<p','<div','<ul','<ol','<table','<form','<header','<nav','<main','<section','<article','<footer','<a ','<img','<span','<input','<button','<label','<style','<script']
   const isHTMLQuest = htmlTags.some(tag => (expected_output?.trim().toLowerCase() ?? '').startsWith(tag))
+
+  // CSS quest: expected output mengandung CSS rules (selector { property: value })
+  const isCSSQuest  = /^[a-zA-Z*#.[\-_:,\s]+\s*\{/.test((expected_output ?? '').trim())
+
+  // Kalau CSS atau HTML quest, had_syntax_error dari JS executor tidak relevan — override jadi false
+  const effectiveSyntaxError = (isHTMLQuest || isCSSQuest) ? false : had_syntax_error
 
   let attemptStatus: 'syntax_error' | 'logic_error' | 'passed_dirty' | 'passed_clean'
 
-  if (had_syntax_error) {
+  if (effectiveSyntaxError) {
     attemptStatus = 'syntax_error'
   } else {
     const outputStr = actual_output ?? ''
     let allPassed   = false
 
-    if (isHTMLQuest) {
+    if (isCSSQuest) {
+      // CSS quest: normalize whitespace lalu compare langsung
+      const normalizeCSS = (s: string) => s.trim()
+        .replace(/\r\n|\n|\r/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/\s*{\s*/g, ' { ')
+        .replace(/\s*}\s*/g, ' } ')
+        .replace(/\s*:\s*/g, ': ')
+        .replace(/\s*;\s*/g, '; ')
+        .replace(/;\s*}/g, '; }')
+        .trim()
+      // Coba extract dari <style> tag kalau ada
+      const extractStyle = (s: string) => {
+        const m = s.match(/<style[^>]*>([\s\S]*?)<\/style>/i)
+        return m ? m[1].trim() : s
+      }
+      const submittedCSS = normalizeCSS(extractStyle(outputStr))
+      const expectedCSS  = normalizeCSS(expected_output)
+      allPassed = submittedCSS === expectedCSS || submittedCSS.includes(expectedCSS)
+    } else if (isHTMLQuest) {
       const submittedBody = normalizeHTML(extractBody(outputStr))
       const submittedFull = normalizeHTML(outputStr)
       const expectedNorm  = normalizeHTML(expected_output)
-      // Cek 3 cara: body saja, full doc, atau expected ada di dalam submitted
       allPassed = submittedBody === expectedNorm
                || submittedFull === expectedNorm
                || submittedFull.includes(expectedNorm)
