@@ -133,7 +133,9 @@ export async function POST(request: NextRequest) {
   const isHTMLQuest = htmlTags.some(tag => (expected_output?.trim().toLowerCase() ?? '').startsWith(tag))
 
   // CSS quest: expected output mengandung CSS rules (selector { property: value })
-  const isCSSQuest  = /^[a-zA-Z*#.[\-_:,\s]+\s*\{/.test((expected_output ?? '').trim())
+  const cssFirstToken = (expected_output ?? '').trim().split(/[\s({]/)[0].toLowerCase()
+  const isCSSQuest  = /^[a-zA-Z0-9*#.()\.\[\]\s,_:>+~-]+\s*\{/.test((expected_output ?? '').trim())
+    && !['function','const','let','var','return','if','else','for','while','console','import','export','class','new','this','async','await','switch','try','catch'].includes(cssFirstToken)
 
   // Kalau CSS atau HTML quest, had_syntax_error dari JS executor tidak relevan — override jadi false
   const effectiveSyntaxError = (isHTMLQuest || isCSSQuest) ? false : had_syntax_error
@@ -176,7 +178,10 @@ export async function POST(request: NextRequest) {
     } else if (test_cases?.length > 0) {
       allPassed = test_cases.every(tc => normalize(outputStr) === normalize(tc.expected_output))
     } else {
-      allPassed = normalize(outputStr) === normalize(expected_output)
+      const normActual   = normalize(outputStr)
+      const normExpected = normalize(expected_output)
+      console.log('DEBUG JS compare:', JSON.stringify({ normActual, normExpected, match: normActual === normExpected }))
+      allPassed = normActual === normExpected
     }
 
     if (allPassed) {

@@ -306,7 +306,11 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
     let hadSyntaxError = false;
 
     // Deteksi CSS quest dari kode yang disubmit
-    const isCSSCode = /^[a-zA-Z*#.[\s]+\s*\{/.test(code.trim()) && !code.trim().startsWith('<')
+    const JS_KEYWORDS = ['function','const','let','var','return','if','else','for','while','console','import','export','class','new','this','async','await','switch','try','catch']
+    const firstToken = code.trim().split(/[\s({]/)[ 0].toLowerCase()
+    const isCSSCode = /^[a-zA-Z0-9*#.()\.\[\]\s,_:>+~-]+\s*\{/.test(code.trim())
+      && !code.trim().startsWith('<')
+      && !JS_KEYWORDS.includes(firstToken)
 
     if (isHTML || isCSSCode) {
       // HTML/CSS: jangan execute, kirim langsung ke server
