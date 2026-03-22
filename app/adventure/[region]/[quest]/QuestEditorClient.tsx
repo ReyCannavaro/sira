@@ -248,10 +248,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
   const [startTime]                   = useState(Date.now());
   const [output,      setOutput]      = useState<string | null>(null);
   const [expPopup,    setExpPopup]    = useState<{ exp: number; streak: number; leveledUp: boolean; newLevel: number } | null>(null);
-  const [pyReady,     setPyReady]     = useState(false);
   const [activePanel, setActivePanel] = useState<"instructions" | "output">("instructions");
-  const workerRef  = useRef<Worker | null>(null);
-  const pendingRef = useRef<Map<string, (r: { output: string; error: string | null; stderr: string }) => void>>(new Map());
 
   const isRetry     = !isFirstPass;
   const hintsLeft   = quest.hints.length - hintsUsed;
@@ -259,59 +256,16 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
   const passed      = feedback?.status === "passed_clean" || feedback?.status === "passed_dirty";
   const isHTML      = isHTMLCode(code);
 
-  useEffect(() => {
-    if (quest.language !== "python") return;
-    const worker = new Worker("/pyodide-worker.js");
-    worker.onmessage = (e) => {
-      const { id, output: out, error, stderr } = e.data;
-      if (id === "__ready__") { setPyReady(true); return; }
-      const resolve = pendingRef.current.get(id);
-      if (resolve) { resolve({ output: out ?? "", error, stderr: stderr ?? "" }); pendingRef.current.delete(id); }
-    };
-    setTimeout(() => worker.postMessage({ id: "__ready__", code: 'print("ok")', packages: [] }), 200);
-    workerRef.current = worker;
-    return () => worker.terminate();
-  }, [quest.language]);
+  // ── Browser preview run (RUN button) ────────────────────────────
+  const handleRun = () => {
+    if (!code.trim()) return;
+    setActivePanel("output");
 
-  const runPythonCode = (src: string): Promise<{ output: string; error: string | null; stderr: string }> =>
-    new Promise(resolve => {
-      const id = Math.random().toString(36).slice(2);
-      pendingRef.current.set(id, resolve);
-      workerRef.current?.postMessage({ id, code: src, packages: [] });
-    });
+    if (isHTML) {
+      setOutput(code);
+      return;
+    }
 
-  /* ── JS Execution Engine ────────────────────────────────────────────── */
-
-  // DOM mock untuk quest yang pakai document/window
-  const DOM_MOCK = [
-    "var __ds__={};",
-    "var document={getElementById:function(id){return{id:id,style:{},innerHTML:'',textContent:'',",
-    "classList:{toggle:function(c){__ds__[id+'_'+c]=!__ds__[id+'_'+c];return __ds__[id+'_'+c];},",
-    "add:function(c){__ds__[id+'_'+c]=true;},remove:function(c){__ds__[id+'_'+c]=false;},",
-    "contains:function(c){return !!__ds__[id+'_'+c];}},",
-    "addEventListener:function(e,fn){__ds__['_ev_'+id+'_'+e]=fn;},",
-    "click:function(){var f=__ds__['_ev_'+id+'_click'];if(f)f();}",
-    "};},querySelector:function(){return{style:{},innerHTML:'',textContent:'',",
-    "classList:{toggle:function(){},add:function(){},remove:function(){},contains:function(){return false;}},",
-    "addEventListener:function(){}};},querySelectorAll:function(){return[];},",
-    "createElement:function(t){return{tagName:t,style:{},classList:{add:function(){},remove:function(){}},",
-    "appendChild:function(){},addEventListener:function(){}};},body:{appendChild:function(){},innerHTML:''}};",
-    "var window={document:document,location:{href:''}};",
-  ].join("\n");
-
-  // Deteksi apakah input adalah kode JS (bukan data numerik)
-  const isCodeInput = (input: string): boolean => {
-    const t = input.trim();
-    if (!t) return false;
-    // Kode JS: mengandung function call atau assignment
-    return /[a-zA-Z_$][a-zA-Z0-9_$]*\s*[=(]/.test(t) ||
-           /[;{}]/.test(t) ||
-           t.includes("=>") ||
-           t.includes("new ");
-  };
-
-  // Jalankan JS tanpa test case (untuk quest tanpa test_cases atau code-as-input)
-  const runJavaScript = (src: string): { output: string; hadSyntaxError: boolean } => {
     const logs: string[] = [];
     const fc = {
       log:   (...a: unknown[]) => logs.push(a.map(String).join(" ")),
@@ -319,221 +273,30 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
       warn:  (...a: unknown[]) => logs.push(a.map(String).join(" ")),
     };
     try {
-      new Function("console", DOM_MOCK + "\n" + src)(fc);
-      return { output: logs.join("\n"), hadSyntaxError: false };
+      const domMock = "var document={getElementById:function(){return{style:{},innerHTML:'',textContent:'',classList:{add:function(){},remove:function(){},toggle:function(){return false;},contains:function(){return false;}},addEventListener:function(){}};},querySelector:function(){return{style:{},innerHTML:'',textContent:'',classList:{add:function(){},remove:function(){},toggle:function(){},contains:function(){return false;}},addEventListener:function(){}};},querySelectorAll:function(){return[];},createElement:function(t){return{tagName:t,style:{},classList:{add:function(){},remove:function(){}},appendChild:function(){},addEventListener:function(){}};},body:{appendChild:function(){},innerHTML:''}};var window={document:document};";
+      new Function("console", domMock + "\n" + code)(fc);
+      setOutput(logs.join("\n") || "(tidak ada output — tambahkan console.log untuk preview)");
     } catch (e: unknown) {
-      return { output: e instanceof Error ? e.message : String(e), hadSyntaxError: true };
+      setOutput(e instanceof Error ? e.message : String(e));
     }
   };
 
-  // Jalankan JS dengan satu test case input
-  const runJavaScriptWithInput = (src: string, input: string): { output: string; hadSyntaxError: boolean } => {
-    const logs: string[] = [];
-    const fc = {
-      log:   (...a: unknown[]) => logs.push(a.map(String).join(" ")),
-      error: (...a: unknown[]) => logs.push(a.map(String).join(" ")),
-      warn:  (...a: unknown[]) => logs.push(a.map(String).join(" ")),
-    };
-
-    // Strip console.log dari user code (line-based)
-    const cleanSrc = src.split("\n")
-      .filter(line => !line.trim().startsWith("console."))
-      .join("\n");
-
-    try {
-      if (isCodeInput(input)) {
-        // Input adalah kode JS — eval langsung setelah definisi fungsi user
-        // Ambil hasil ekspresi terakhir dari multi-statement
-        const stmts = input.split(";").map(s => s.trim()).filter(Boolean);
-        const lastStmt = stmts[stmts.length - 1];
-        const prevStmts = stmts.slice(0, -1).join(";");
-
-        const evalCode = [
-          prevStmts ? prevStmts + ";" : "",
-          "var __r__ = (function(){ try { return eval(" + JSON.stringify(lastStmt) + "); } catch(e){ return undefined; } })();",
-          "if(__r__ !== undefined && __r__ !== null) {",
-          "  console.log(typeof __r__ === 'object' ? JSON.stringify(__r__) : String(__r__));",
-          "} else {",
-          "  var __fn__ = " + JSON.stringify(lastStmt.split("(")[0].trim()) + ";",
-          "  console.log(__fn__ + ' berhasil');",
-          "}",
-        ].join("\n");
-
-        new Function("console", "eval", DOM_MOCK + "\n" + cleanSrc + "\n" + evalCode)(fc, eval);
-      } else {
-        // Input adalah data — parse sebagai args dan inject ke fungsi
-        let parsedArgs: unknown[];
-        try {
-          parsedArgs = JSON.parse("[" + input + "]");
-          if (!Array.isArray(parsedArgs)) parsedArgs = [parsedArgs];
-        } catch {
-          parsedArgs = input.split(",").map(s => {
-            const t = s.trim();
-            const n = Number(t);
-            return isNaN(n) ? t : n;
-          });
-        }
-
-        // Detect nama fungsi utama dari kode
-        const fnMatch = cleanSrc.match(/(?:function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*(?:function|\([^)]*\)\s*=>))/);
-        if (fnMatch) {
-          const fnName = fnMatch[1] || fnMatch[2];
-          const argsStr = parsedArgs.map(a => JSON.stringify(a)).join(",");
-          const retCode = [
-            "var __r__ = " + fnName + "(" + argsStr + ");",
-            "if(__r__ !== undefined && __r__ !== null) {",
-            "  console.log(typeof __r__ === 'object' ? JSON.stringify(__r__) : String(__r__));",
-            "} else {",
-            "  console.log('" + fnName + " berhasil');",
-            "}",
-          ].join("\n");
-          new Function("console", DOM_MOCK + "\n" + cleanSrc + "\n" + retCode)(fc);
-        } else {
-          new Function("console", DOM_MOCK + "\n" + cleanSrc)(fc);
-        }
-      }
-
-      return { output: logs.join("\n").trim(), hadSyntaxError: false };
-    } catch (e: unknown) {
-      // Untuk ValueError dan exception lain, format sebagai string
-      const msg = e instanceof Error ? e.message : String(e);
-      return { output: msg, hadSyntaxError: false }; // false = bukan syntax error, mungkin runtime exception yang valid
-    }
-  };
-
+  // ── Submit ke server (server yang execute + grade) ────────────────
   const handleSubmit = async () => {
     if (submitting || !code.trim()) return;
     setSubmitting(true);
     setFeedback(null);
     setOutput(null);
-
     const durationSec = Math.round((Date.now() - startTime) / 1000);
-    let actualOutput   = "";
-    let hadSyntaxError = false;
-
-    // Deteksi CSS quest dari kode yang disubmit
-    const JS_KEYWORDS = ['function','const','let','var','return','if','else','for','while','console','import','export','class','new','this','async','await','switch','try','catch']
-    const firstToken = code.trim().split(/[\s({]/)[ 0].toLowerCase()
-    const isCSSCode = /^[a-zA-Z0-9*#.()\.\[\]\s,_:>+~-]+\s*\{/.test(code.trim())
-      && !code.trim().startsWith('<')
-      && !JS_KEYWORDS.includes(firstToken)
-
-    if (isHTML || isCSSCode) {
-      // HTML/CSS: jangan execute, kirim langsung ke server
-      actualOutput   = code
-      hadSyntaxError = false
-      setOutput(null)
-    } else if (quest.language === "javascript") {
-      if (quest.test_cases?.length > 0) {
-        // Jalankan semua TC dalam satu konteks shared (state antar TC dipertahankan)
-        const tcOutputs: string[] = [];
-        let syntaxErr = false;
-
-        const cleanSrc = code.split("\n")
-          .filter(line => !line.trim().startsWith("console."))
-          .join("\n");
-
-        // Fungsi untuk run satu TC dengan kode tertentu
-        const runTC = (tcCode: string, extraSetup = ""): string => {
-          const logs2: string[] = [];
-          const fc2 = {
-            log:   (...a: unknown[]) => logs2.push(a.map(String).join(" ")),
-            error: (...a: unknown[]) => logs2.push(a.map(String).join(" ")),
-            warn:  (...a: unknown[]) => logs2.push(a.map(String).join(" ")),
-          };
-          try {
-            const stmts = tcCode.split(";").map((s: string) => s.trim()).filter(Boolean);
-            const last = stmts[stmts.length - 1];
-            const prev = stmts.slice(0, -1).join(";");
-            const retCode = [
-              prev ? prev + ";" : "",
-              "var __r__ = (function(){ try{ return eval(" + JSON.stringify(last) + "); }catch(e){ return undefined; } })();",
-              "if(__r__ !== undefined && __r__ !== null) {",
-              "  console.log(typeof __r__ === 'object' ? JSON.stringify(__r__) : String(__r__));",
-              "} else { console.log(" + JSON.stringify(last.split("(")[0].trim()) + " + ' berhasil'); }",
-            ].join("\n");
-            new Function("console", "eval", DOM_MOCK + "\n" + extraSetup + "\n" + cleanSrc + "\n" + retCode)(fc2, eval);
-            return logs2[0]?.trim() ?? "";
-          } catch { return ""; }
-        };
-
-        try {
-          // Strategi: coba shared state dulu (semua TC dalam satu run)
-          const sharedLogs: string[] = [];
-          const fcShared = {
-            log:   (...a: unknown[]) => sharedLogs.push(a.map(String).join(" ")),
-            error: (...a: unknown[]) => sharedLogs.push(a.map(String).join(" ")),
-            warn:  (...a: unknown[]) => sharedLogs.push(a.map(String).join(" ")),
-          };
-          const allTCBlocks = quest.test_cases.map((tc, i) => {
-            if (!tc.input.trim()) return "";
-            const stmts = tc.input.split(";").map((s: string) => s.trim()).filter(Boolean);
-            const last = stmts[stmts.length - 1];
-            const prev = stmts.slice(0, -1).join(";");
-            return [
-              prev ? prev + ";" : "",
-              "var __r" + i + "__ = (function(){ try{ return eval(" + JSON.stringify(last) + "); }catch(e){ return undefined; } })();",
-              "if(__r" + i + "__ !== undefined && __r" + i + "__ !== null) {",
-              "  console.log(typeof __r" + i + "__ === 'object' ? JSON.stringify(__r" + i + "__) : String(__r" + i + "__));",
-              "} else { console.log(" + JSON.stringify(last.split("(")[0].trim()) + " + ' berhasil'); }",
-            ].join("\n");
-          }).join("\n");
-          new Function("console", "eval", DOM_MOCK + "\n" + cleanSrc + "\n" + allTCBlocks)(fcShared, eval);
-
-          // Untuk setiap TC: pakai shared result, tapi jika tidak match expected, coba fresh
-          for (let i = 0; i < quest.test_cases.length; i++) {
-            const sharedOut = sharedLogs[i]?.trim() ?? "";
-            const exp = quest.test_cases[i].expected_output?.trim() ?? "";
-            // Normalisasi sederhana untuk compare
-            const normOut = sharedOut.replace(/:\s+/g, ":").replace(/,\s+/g, ",");
-            const normExp = exp.replace(/:\s+/g, ":").replace(/,\s+/g, ",");
-            if (normOut === normExp || !exp) {
-              tcOutputs.push(sharedOut);
-            } else {
-              // Coba fresh state untuk TC ini
-              const freshOut = runTC(quest.test_cases[i].input);
-              const normFresh = freshOut.replace(/:\s+/g, ":").replace(/,\s+/g, ",");
-              tcOutputs.push(normFresh === normExp ? freshOut : sharedOut);
-            }
-          }
-        } catch (e: unknown) {
-          syntaxErr = true;
-          actualOutput = e instanceof Error ? e.message : String(e);
-        }
-
-        hadSyntaxError = syntaxErr;
-        if (!syntaxErr) {
-          const preview = tcOutputs.slice(0, 2).map((o, i) => "Test " + (i+1) + ": " + o).join("\n");
-          setOutput(preview || null);
-          setActivePanel("output");
-          actualOutput = JSON.stringify(tcOutputs);
-        }
-      } else {
-        const r = runJavaScript(code);
-        actualOutput = r.output; hadSyntaxError = r.hadSyntaxError;
-        setOutput(actualOutput || null); setActivePanel("output");
-      }
-    } else if (quest.language === "python") {
-      if (!workerRef.current) {
-        setFeedback({ status: "syntax_error", text: "Python runtime belum siap. Tunggu sebentar.", exp: 0 });
-        setSubmitting(false); return;
-      }
-      const pyResult  = await runPythonCode(code);
-      actualOutput    = pyResult.output.trim();
-      hadSyntaxError  = !!pyResult.error;
-      if (hadSyntaxError) actualOutput = pyResult.error ?? pyResult.stderr ?? "";
-      setOutput(actualOutput || null); setActivePanel("output");
-    }
 
     try {
       const res  = await fetch("/api/quests/submit", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          quest_id: quest.id, submitted_code: code,
-          hints_used_count: hintsUsed, duration_sec: durationSec,
-          language: quest.language, expected_output: quest.expected_output,
-          actual_output: actualOutput, had_syntax_error: hadSyntaxError,
-          test_cases: quest.test_cases,
+          quest_id: quest.id,
+          submitted_code: code,
+          hints_used_count: hintsUsed,
+          duration_sec: durationSec,
         }),
       });
       const data = await res.json();
@@ -542,6 +305,11 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
         return;
       }
       const d = data.data;
+      // Tampilkan output dari server
+      if (d?.execution_output) {
+        setOutput(d.execution_output);
+        setActivePanel("output");
+      }
       setFeedback({ status: d?.status as FeedbackStatus, text: d?.socratic_feedback ?? "", exp: d?.exp_earned ?? 0 });
 
       const isPassed = d?.status === "passed_clean" || d?.status === "passed_dirty";
@@ -634,15 +402,7 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
             {isRetry ? "+0 / +25" : `+${quest.exp_reward}`} EXP
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 99, border: "1px solid #1A2535", background: "#0B1524", fontSize: 10, fontFamily: "var(--font-geist-mono)", color: "#475569" }}>
-            {quest.language === "python" ? (
-              <>
-                Python
-                {!pyReady
-                  ? <Loader2 size={9} style={{ animation: "spin 1s linear infinite" }} />
-                  : <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#34D399", display: "inline-block" }} />
-                }
-              </>
-            ) : quest.language === "javascript" ? "JavaScript" : "HTML"}
+            {quest.language === "python" ? "Python" : quest.language === "javascript" ? "JavaScript" : "HTML"}
           </span>
         </div>
       </div>
@@ -879,6 +639,21 @@ export default function QuestEditorClient({ quest, region, lastAttempt, isFirstP
               >
                 <Lightbulb size={13} strokeWidth={1.75} />
                 Hint ({hintsLeft})
+              </button>
+
+              <button onClick={handleRun} disabled={submitting || !code.trim()} style={{
+                display: "flex", alignItems: "center", gap: 5,
+                padding: "0 14px", height: 36, borderRadius: 8, flexShrink: 0,
+                border: "1px solid #1A2535",
+                background: "none", color: "#94A3B8",
+                cursor: !code.trim() ? "not-allowed" : "pointer",
+                fontSize: 12, transition: "all .2s",
+              }}
+                onMouseEnter={e => { if (code.trim()) (e.currentTarget as HTMLElement).style.background = "#1A2535"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "none"; }}
+              >
+                <Play size={11} strokeWidth={2.5} fill="currentColor" />
+                Run
               </button>
 
               <button onClick={handleSubmit} disabled={submitting || !code.trim()} style={{
