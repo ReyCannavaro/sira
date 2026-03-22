@@ -11,7 +11,6 @@ import { randomBytes } from 'crypto'
 
 const execAsync = promisify(exec)
 
-/* ── JavaScript execution via Node vm ─────────────────────────────── */
 function executeJS(
   code: string,
   input: string,
@@ -20,12 +19,10 @@ function executeJS(
 
   const outputs: string[] = []
 
-  // Determine inputs to run
   const inputs = testCases.length > 0
     ? testCases.map(tc => tc.input)
     : [input]
 
-  // Build sandbox
   const sandbox = {
     console: { log: (...a: unknown[]) => {}, error: () => {}, warn: () => {} },
     Math, JSON, Array, Object, String, Number, Boolean, Date,
@@ -34,7 +31,6 @@ function executeJS(
     __outputs__: outputs,
   }
 
-  // If no test_cases or empty input → just run code as-is
   if (testCases.length === 0) {
     const logs: string[] = []
     sandbox.console = {
@@ -53,7 +49,6 @@ function executeJS(
     return { outputs, hadSyntaxError: false, errorMsg: '' }
   }
 
-  // Run all test cases in shared state (one vm context)
   const sharedLogs: string[] = []
   const sharedSandbox = {
     ...sandbox,
@@ -67,26 +62,18 @@ function executeJS(
 
   try {
     const ctx = vm.createContext(sharedSandbox)
-
-    // Load user code first
     vm.runInContext(code, ctx, { timeout: 5000 })
 
-    // Run each test case input
     for (let i = 0; i < inputs.length; i++) {
       const tcLogs: string[] = []
       ;(ctx as Record<string, unknown>).__currentLogs__ = tcLogs
-
       const tcInput = inputs[i].trim()
       if (!tcInput) { outputs.push(''); continue }
-
       try {
-        // Parse input: if it looks like JS code, run it directly
-        // Otherwise treat as args to main function
         const isCode = /[a-zA-Z_$][a-zA-Z0-9_$]*\s*[=(]/.test(tcInput) ||
                        tcInput.includes(';') || tcInput.includes('=>')
 
         if (isCode) {
-          // Split by semicolons, run each statement, capture last result
           const stmts = tcInput.split(';').map(s => s.trim()).filter(Boolean)
           let lastResult: unknown
           for (const stmt of stmts) {
@@ -97,12 +84,10 @@ function executeJS(
               ? JSON.stringify(lastResult)
               : String(lastResult))
           } else if (tcLogs.length === 0) {
-            // Function returned undefined (void) — use function name
             const fnName = tcInput.split('(')[0].trim().replace(/[^a-zA-Z0-9_$]/g, '')
             tcLogs.push(`${fnName} berhasil`)
           }
         } else {
-          // Numeric/string args — find and call main function
           const fnMatch = code.match(/(?:function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*(?:function|\([^)]*\)\s*=>))/)
           if (fnMatch) {
             const fnName = fnMatch[1] || fnMatch[2]
@@ -120,13 +105,10 @@ function executeJS(
       outputs.push(tcLogs[0]?.trim() ?? '')
     }
 
-    // For test cases that expected fresh state (check against expected)
-    // Re-run in fresh context and take result if it matches better
     for (let i = 0; i < testCases.length; i++) {
       const exp = (testCases[i].expected_output ?? '').trim()
       const shared = outputs[i] ?? ''
       if (shared.replace(/:\s+/g, ':').replace(/,\s+/g, ',') !== exp.replace(/:\s+/g, ':').replace(/,\s+/g, ',')) {
-        // Try fresh
         try {
           const freshCtx = vm.createContext({ ...sandbox, console: { log: (...a: unknown[]) => freshLogs.push(a.map(String).join(' ')), error: () => {}, warn: () => {} } })
           const freshLogs: string[] = []
@@ -147,7 +129,7 @@ function executeJS(
           const normFresh = freshOut.replace(/:\s+/g, ':').replace(/,\s+/g, ',')
           const normExp   = exp.replace(/:\s+/g, ':').replace(/,\s+/g, ',')
           if (normFresh === normExp) outputs[i] = freshOut
-        } catch { /* keep shared */ }
+        } catch {}
       }
     }
 
@@ -159,7 +141,6 @@ function executeJS(
   return { outputs, hadSyntaxError: false, errorMsg: '' }
 }
 
-/* ── Python execution via subprocess ──────────────────────────────── */
 async function executePython(
   code: string,
   input: string,

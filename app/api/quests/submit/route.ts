@@ -107,7 +107,6 @@ function executeJS(code: string, testCases: { input: string; expected_output: st
     }
   }
 
-  // Shared state
   const sharedOutputs: string[] = []
   let sharedCtx: vm.Context
   try {
@@ -117,11 +116,35 @@ function executeJS(code: string, testCases: { input: string; expected_output: st
       const logs: string[] = []
       ;(sharedCtx as Record<string, unknown>).console = { log: (...a: unknown[]) => logs.push(a.map(String).join(' ')), error: () => {}, warn: () => {} }
       try {
-        const stmts = tc.input.split(';').map((s: string) => s.trim()).filter(Boolean)
+        const inp = tc.input.trim()
         let last: unknown
-        for (const s of stmts) last = vm.runInContext(s, sharedCtx, { timeout: 2000 })
+        const isObjectOrArray = /^[{[]/.test(inp)
+        const isAssignment = /^[a-zA-Z_$][a-zA-Z0-9_$]*\s*=/.test(inp) && !/^[a-zA-Z_$][a-zA-Z0-9_$]*\s*==/.test(inp)
+        const hasFunctionCall = /[a-zA-Z_$][a-zA-Z0-9_$]*\s*\(/.test(inp)
+
+        if (isObjectOrArray) {
+          const fnMatch = code.match(/(?:function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*(?:function|\([^)]*\)\s*=>))/)
+          if (fnMatch) {
+            const fnName = fnMatch[1] || fnMatch[2]
+            last = vm.runInContext(fnName + '(' + inp + ')', sharedCtx, { timeout: 2000 })
+          }
+        } else if (isAssignment && !hasFunctionCall) {
+          const varName = inp.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=/)?.[1] ?? ''
+          vm.runInContext(inp, sharedCtx, { timeout: 2000 })
+          const fnNames = Array.from(code.matchAll(/function\s+(\w+)\s*\(/g)).map((m: RegExpMatchArray) => m[1])
+          for (const fn of fnNames) {
+            try {
+              const r = vm.runInContext(fn + '(' + varName + ')', sharedCtx, { timeout: 2000 })
+              if (typeof r === 'string') { last = r; break }
+            } catch {}
+          }
+          if (last === undefined) last = vm.runInContext(varName, sharedCtx, { timeout: 2000 })
+        } else {
+          const stmts = inp.split(';').map((s: string) => s.trim()).filter(Boolean)
+          for (const s of stmts) last = vm.runInContext(s, sharedCtx, { timeout: 2000 })
+        }
         if (last !== undefined && last !== null) logs.unshift(typeof last === 'object' ? JSON.stringify(last) : String(last))
-        else if (logs.length === 0) logs.push(tc.input.split('(')[0].trim() + ' berhasil')
+        else if (logs.length === 0) logs.push(inp.split('(')[0].trim() + ' berhasil')
       } catch (e: unknown) { logs.push(e instanceof Error ? e.message : String(e)) }
       sharedOutputs.push(logs[0]?.trim() ?? '')
     }
@@ -129,7 +152,6 @@ function executeJS(code: string, testCases: { input: string; expected_output: st
     return { outputs: [e instanceof Error ? e.message : String(e)], hadSyntaxError: true }
   }
 
-  // Per-TC fresh fallback
   const outputs: string[] = []
   for (let i = 0; i < testCases.length; i++) {
     const exp = normalize(testCases[i].expected_output ?? '')
@@ -138,9 +160,19 @@ function executeJS(code: string, testCases: { input: string; expected_output: st
       const freshLogs: string[] = []
       const freshCtx = vm.createContext({ ...base, console: { log: (...a: unknown[]) => freshLogs.push(a.map(String).join(' ')), error: () => {}, warn: () => {} }, document: makeDomMock(), window: {} })
       vm.runInContext(code, freshCtx, { timeout: 5000 })
-      const stmts = testCases[i].input.split(';').map((s: string) => s.trim()).filter(Boolean)
+      const freshInp = testCases[i].input.trim()
+      const freshIsObj = /^[{[]/.test(freshInp)
       let last: unknown
-      for (const s of stmts) last = vm.runInContext(s, freshCtx, { timeout: 2000 })
+      if (freshIsObj) {
+        const fnMatch2 = code.match(/(?:function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*(?:function|\([^)]*\)\s*=>))/)
+        if (fnMatch2) {
+          const fnName2 = fnMatch2[1] || fnMatch2[2]
+          last = vm.runInContext(fnName2 + '(' + freshInp + ')', freshCtx, { timeout: 2000 })
+        }
+      } else {
+        const stmts = freshInp.split(';').map((s: string) => s.trim()).filter(Boolean)
+        for (const s of stmts) last = vm.runInContext(s, freshCtx, { timeout: 2000 })
+      }
       let freshOut = freshLogs[0]?.trim() ?? ''
       if (last !== undefined && last !== null) freshOut = typeof last === 'object' ? JSON.stringify(last) : String(last)
       outputs.push(normCompare(freshOut, exp) ? freshOut : sharedOutputs[i])
@@ -202,15 +234,14 @@ export async function POST(request: NextRequest) {
   const { count: passedCount } = await supabase.from('quest_attempts').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('quest_id', quest_id).in('status', ['passed_clean', 'passed_dirty'])
   const isFirstPass = (passedCount ?? 0) === 0
 
-  const htmlTags = ['<!doctype','<html','<h1','<h2','<h3','<h4','<h5','<h6','<p','<div','<ul','<ol','<table','<form','<header','<nav','<main','<section','<article','<footer','<a ','<img','<span','<input','<button','<label','<style','<script']
-  const isHTMLQuest = htmlTags.some(tag => expectedOutput.trim().toLowerCase().startsWith(tag))
-  // CSS quest: expected output adalah CSS rules, BUKAN JSON/JS
-  // JSON dimulai dengan [ atau { diikuti " — bukan CSS
-  const looksLikeJSON = /^[\[{]/.test(expectedOutput.trim())
-  const cssFirstToken = expectedOutput.trim().split(/[\s({]/)[0].toLowerCase()
-  const isCSSQuest = !looksLikeJSON
-    && /^[a-zA-Z0-9*#.()\.\[\]\s,_:>+~-]+\s*\{/.test(expectedOutput.trim())
-    && !['function','const','let','var','return','if','else','for','while','console','import','export','class','new','this','async','await'].includes(cssFirstToken)
+  const hasTestCases = testCases.length > 0
+  const hasHTMLTags  = /<[a-zA-Z]/.test(expectedOutput)
+  const looksLikeJSON = /^[\[{"]/.test(expectedOutput.trim())
+
+  const isCSSQuest = !hasHTMLTags && !looksLikeJSON
+    && /[a-zA-Z0-9.*#:[\]()_,\s>+~-]+\s*\{[^}]+:[^}]+\}/.test(expectedOutput)
+
+  const isHTMLQuest = !isCSSQuest && !hasTestCases && hasHTMLTags && !looksLikeJSON
 
   let actualOutputs: string[] = []
   let hadSyntaxError = false
@@ -243,8 +274,11 @@ export async function POST(request: NextRequest) {
         || normalizeHTML(sub).includes(expN) || normalizeHTML(extractBody(sub)).includes(expN)
     } else if (testCases.length > 0) {
       allPassed = testCases.every((tc, i) => {
-        const a = normalize(actualOutputs[i] ?? '')
-        const e = normalize(tc.expected_output?.trim() ? tc.expected_output : expectedOutput)
+        const raw    = (actualOutputs[i] ?? '').trim()
+        const rawExp = (tc.expected_output?.trim() ? tc.expected_output : expectedOutput).trim()
+        if (raw === rawExp) return true
+        const a = normalize(raw)
+        const e = normalize(rawExp)
         return normCompare(a, e) || normCompare(a, normalize(expectedOutput))
       })
     } else {
